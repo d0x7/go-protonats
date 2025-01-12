@@ -107,11 +107,11 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("type ServerOption func(config *", microConfig, ")")
 
 	// Generate server option functions
-	for field, typ := range map[string]string{
-		"StatsHandler": "StatsHandler",
-		"DoneHandler":  "DoneHandler",
-		"ErrorHandler": "ErrHandler",
-	} {
+	for _, typ := range []string{"StatsHandler", "DoneHandler", "ErrHandler"} {
+		field := typ
+		if typ == "ErrHandler" {
+			field = "ErrorHandler"
+		}
 		g.P("func With", field, "(handler ", microPkg.Ident(typ), ") ServerOption {")
 		g.P("return func(config *", microConfig, ") {")
 		g.P("config.", field, " = handler")
