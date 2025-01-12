@@ -106,6 +106,42 @@ func main() {
 }
 ```
 
+### Special handling for empty requests/responses
+
+When specifying an RPC method that uses either or both the [`google/protobuf/empty.proto`](https://protobuf.dev/reference/protobuf/google.protobuf/#empty) type, that method will not generate a parameter to be passed as request/response, depending on how the RPC is defined.
+
+For example, the following protobuf file will generate the following method signature:
+
+```protobuf
+syntax = "proto3";
+package your.package;
+import "google/protobuf/empty.proto";
+option go_package = "github.com/user/repo/pb;pb";
+
+service HelloWorldService {
+    rpc NoRequest(google.protobuf.Empty) returns (HelloWorldResponse);
+    rpc NoResponse(HelloWorldRequest) returns (google.protobuf.Empty);
+    rpc NoRequestNoResponse(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+```
+
+```go
+// Client
+type ConductorServiceNATSClient interface {
+    NoRequest(opts ...CallOption) (*HelloWorldResponse, error)
+    NoResponse(req *HelloWorldResponse, opts ...CallOption) (error)
+    NoRequestNoResponse(opts ...CallOption) (error)
+    // [...]
+}
+// Server
+type ConductorServiceNATSServer interface {
+    NoRequest() (*HelloWorldResponse, error)
+    NoResponse(req *HelloWorldResponse) (error)
+    NoRequestNoResponse() (error)
+    // [...]
+}
+````
+
 ### Custom Errors
 
 You can also send custom errors to the client, but for that you need to add this package to your project:
