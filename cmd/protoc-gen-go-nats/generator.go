@@ -26,6 +26,8 @@ var (
 	protoMarshal   = protoPkg.Ident("Marshal")
 	protoUnmarshal = protoPkg.Ident("Unmarshal")
 
+	emptyPb = "google/protobuf/empty.proto"
+
 	// reservedKeywords is a map of reserved keywords that cannot be used as method names
 	reservedKeywords = map[string]struct{}{
 		"listinstances": {},
@@ -89,7 +91,14 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 			g.P("// ", method.GoName, " is a reserved keyword and cannot be used as a method name")
 			continue
 		}
-		g.P(method.Comments.Leading, method.GoName, "(req *", method.Input.GoIdent, ") (*", method.Output.GoIdent, ", error)")
+		var req, resp string
+		if method.Input.Location.SourceFile != emptyPb {
+			req = "req *" + g.QualifiedGoIdent(method.Input.GoIdent)
+		}
+		if method.Output.Location.SourceFile != emptyPb {
+			resp = "*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", "
+		}
+		g.P(method.Comments.Leading, method.GoName, "(", req, ") (", resp, "error)")
 	}
 	g.P("}")
 	g.P()
@@ -161,13 +170,22 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 
 		handler := method.GoName + "Handler"
 		g.P(handler, " := ", microPkg.Ident("HandlerFunc"), "(func(request ", microRequest, ") {")
-		g.P("var req ", method.Input.GoIdent)
-		g.P("if err := ", protoUnmarshal, "(request.Data(), &req); err != nil {")
-		g.P("request.Error(", strconv.Quote("560"), ", ", strconv.Quote("Failed to unmarshal proto message"), ", []byte(err.Error()))")
-		g.P("return")
-		g.P("}")
-		g.P()
-		g.P("response, err := impl.", method.GoName, "(&req)")
+
+		var handlerReq string
+		if method.Input.Location.SourceFile != emptyPb {
+			handlerReq = "&req"
+			g.P("var req ", method.Input.GoIdent)
+			g.P("if err := ", protoUnmarshal, "(request.Data(), &req); err != nil {")
+			g.P("request.Error(", strconv.Quote("560"), ", ", strconv.Quote("Failed to unmarshal proto message"), ", []byte(err.Error()))")
+			g.P("return")
+			g.P("}")
+			g.P()
+		}
+		var handlerResp string
+		if method.Output.Location.SourceFile != emptyPb {
+			handlerResp = "response, "
+		}
+		g.P(handlerResp, "err := impl.", method.GoName, "(", handlerReq, ")")
 		g.P("if err != nil {")
 		g.P("if serverErr, ok := err.(", goNatsPkg.Ident("ServerError"), "); ok {")
 		g.P("request.Error(serverErr.Code, serverErr.Description, serverErr.GetWrapped(), serverErr.GetOptHeaders())")
@@ -177,13 +195,16 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P("return")
 		g.P("}")
 		g.P()
-		g.P("data, err := ", protoMarshal, "(response)")
-		g.P("if err != nil {")
-		g.P("request.Error(", strconv.Quote("560"), ", ", strconv.Quote("Failed to marshal proto message"), ", []byte(err.Error()))")
-		g.P("return")
-		g.P("}")
-		g.P()
-		g.P("request.Respond(data)")
+		if method.Output.Location.SourceFile != emptyPb {
+			g.P("data, err := ", protoMarshal, "(response)")
+			g.P("if err != nil {")
+			g.P("request.Error(", strconv.Quote("560"), ", ", strconv.Quote("Failed to marshal proto message"), ", []byte(err.Error()))")
+			g.P("return")
+			g.P("}")
+			g.P("request.Respond(data)")
+		} else {
+			g.P("request.Respond(nil)")
+		}
 		g.P("})")
 
 		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName), ", ", handler, ", ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)), "))")
@@ -221,8 +242,15 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 			g.P("// ", method.GoName, " is a reserved keyword and cannot be used as a method name")
 			continue
 		}
+		var req, resp string
+		if method.Input.Location.SourceFile != emptyPb {
+			req = "req *" + g.QualifiedGoIdent(method.Input.GoIdent) + ", "
+		}
+		if method.Output.Location.SourceFile != emptyPb {
+			resp = "*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", "
+		}
 		g.AnnotateSymbol(cliName+"."+method.GoName, protogen.Annotation{Location: method.Location})
-		g.P(method.Comments.Leading, method.GoName, "(req *", method.Input.GoIdent, ", opts ...CallOption) (*", method.Output.GoIdent, ", error)")
+		g.P(method.Comments.Leading, method.GoName, "(", req, "opts ...CallOption) (", resp, "error)")
 	}
 	g.P("SetTimeout(", timeDuration, ")")
 	g.P("// ListInstances returns a list containing all instances of this service")
@@ -289,13 +317,13 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 
 	// Client struct functions
 
-	//		Generate SetTimeout function
+	// Generate SetTimeout function
 	g.P("func (c *", unexport(cliName), ") SetTimeout(timeout ", timeDuration, ") {")
 	g.P("c.timeout = timeout")
 	g.P("}")
 	g.P()
 
-	//		Generate ListInstances function
+	// Generate ListInstances function
 	g.P("func (c *", unexport(cliName), ") ListInstances() ([]*Ping, error) {")
 	g.P("return c.Ping()")
 	g.P("}")
@@ -306,11 +334,13 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 	generateReqFunc(g, cliName, service.GoName, "Info", microPkg.Ident("Info"), microPkg.Ident("InfoVerb"))
 	generateReqFunc(g, cliName, service.GoName, "Ping", "Ping", microPkg.Ident("PingVerb"))
 
-	// 		Generate handle function
-	g.P("func (c *", unexport(cliName), ") handle(req ", protoMessage, ", subject string, out ", protoMessage, ", timeout ", timeDuration, ") error {")
-	g.P("data, err := ", protoMarshal, "(req)")
-	g.P("if err != nil {")
+	// Generate handle function
+	g.P("func (c *", unexport(cliName), ") handle(req ", protoMessage, ", subject string, out ", protoMessage, ", timeout ", timeDuration, ") (err error) {")
+	g.P("var data []byte")
+	g.P("if req != nil {")
+	g.P("if data, err = ", protoMarshal, "(req); err != nil {")
 	g.P("return ", goNatsPkg.Ident("ErrMarshallingFailed"))
+	g.P("}")
 	g.P("}")
 	g.P("msg, err := c.nc.Request(subject, data, timeout)")
 	g.P("if err != nil {")
@@ -323,8 +353,10 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("}")
 	g.P("return ", goNatsPkg.Ident("ServiceError"), "{errCode, errMsg, string(msg.Data)}")
 	g.P("}")
-	g.P("if err := ", protoUnmarshal, "(msg.Data, out); err != nil {")
+	g.P("if out != nil {")
+	g.P("if err = ", protoUnmarshal, "(msg.Data, out); err != nil {")
 	g.P("return ", goNatsPkg.Ident("ErrUnmarshallingFailed"))
+	g.P("}")
 	g.P("}")
 	g.P("return nil")
 	g.P("}")
@@ -407,9 +439,26 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 			continue
 		}
 
-		g.P("func (c *", unexport(cliName), ") ", method.GoName, "(req *", method.Input.GoIdent, ", opts ...CallOption) (*", method.Output.GoIdent, ", error) {")
+		var req, resp, handleReq, handleResp, returnResp string
+		if method.Input.Location.SourceFile != emptyPb {
+			req = "req *" + g.QualifiedGoIdent(method.Input.GoIdent) + ", "
+			handleReq = "req"
+		} else {
+			handleReq = "nil"
+		}
+		if method.Output.Location.SourceFile != emptyPb {
+			resp = "*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", "
+			handleResp = "&response"
+			returnResp = "&response, "
+		} else {
+			handleResp = "nil"
+			returnResp = ""
+		}
+		g.P("func (c *", unexport(cliName), ") ", method.GoName, "(", req, "opts ...CallOption) (", resp, "error) {")
 		g.P("options := process(opts...)")
-		g.P("var response ", method.Output.GoIdent)
+		if method.Output.Location.SourceFile != emptyPb {
+			g.P("var response ", method.Output.GoIdent)
+		}
 		g.P("var err error")
 		g.P()
 		g.P("timeout := c.timeout")
@@ -418,11 +467,11 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P("}")
 		g.P()
 		g.P("if options.hasInstanceID() {")
-		g.P("err = c.handle(req, ", strconv.Quote(subjectName(service, method)+"."), " + options.instanceID, &response, timeout)")
+		g.P("err = c.handle(", handleReq, ", ", strconv.Quote(subjectName(service, method)+"."), " + options.instanceID, ", handleResp, ", timeout)")
 		g.P("} else {")
-		g.P("err = c.handle(req, ", strconv.Quote(subjectName(service, method)), ", &response, timeout)")
+		g.P("err = c.handle(", handleReq, ", ", strconv.Quote(subjectName(service, method)), ", ", handleResp, ", timeout)")
 		g.P("}")
-		g.P("return &response, err")
+		g.P("return ", returnResp, "err")
 		g.P("}")
 		g.P()
 	}
