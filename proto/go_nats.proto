@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package go_nats;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "xiam.li/go-nats/proto";
+
+// Option used to mark a method as a broadcast method
+extend google.protobuf.MethodOptions {
+  bool broadcast = 526714442; // Polynomial rolling hash of "xiam.li/go-nats/proto/broadcast"
+}

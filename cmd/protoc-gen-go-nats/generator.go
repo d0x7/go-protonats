@@ -3,13 +3,16 @@ package main
 import (
 	"fmt"
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/proto"
 	"strconv"
 	"strings"
+	gonats_proto "xiam.li/go-nats/proto"
 )
 
 const (
 	natsPkg   = protogen.GoImportPath("github.com/nats-io/nats.go")
 	microPkg  = protogen.GoImportPath("github.com/nats-io/nats.go/micro")
+	nuidPkg   = protogen.GoImportPath("github.com/nats-io/nuid")
 	timePkg   = protogen.GoImportPath("time")
 	slogPkg   = protogen.GoImportPath("log/slog")
 	protoPkg  = protogen.GoImportPath("google.golang.org/protobuf/proto")
@@ -72,6 +75,14 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 	for _, service := range file.Services {
 		generateService(g, service)
 	}
+}
+
+func isUsingBroadcasting(method *protogen.Method) bool {
+	if !proto.HasExtension(method.Desc.Options(), gonats_proto.E_Broadcast) {
+		return false
+	}
+	extension := proto.GetExtension(method.Desc.Options(), gonats_proto.E_Broadcast)
+	return extension.(bool)
 }
 
 func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
@@ -207,15 +218,22 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 		}
 		g.P("})")
 
-		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName), ", ", handler, ", ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)), "))")
-		g.P("if err != nil {")
-		g.P("panic(err) // TODO: Update this to proper error handling")
-		g.P("}")
+		if isUsingBroadcasting(method) {
+			// Add a broadcast endpoint for the method
+			g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Broadcast"), ", ", handler, ", ", microPkg.Ident("WithEndpointQueueGroup"), "(", nuidPkg.Ident("Next"), "()), ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)), "))")
+		} else {
+			// Add a shared endpoint for the method
+			g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName), ", ", handler, ", ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)), "))")
+			g.P("if err != nil {")
+			g.P("panic(err) // TODO: Update this to proper error handling")
+			g.P("}")
 
-		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Direct"), ", ", handler, ", ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)+"."), " + service.Info().ID))")
-		g.P("if err != nil {")
-		g.P("panic(err) // TODO: Update this to proper error handling")
-		g.P("}")
+			// Add a direct endpoint for the method
+			g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Direct"), ", ", handler, ", ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)+"."), " + service.Info().ID))")
+			g.P("if err != nil {")
+			g.P("panic(err) // TODO: Update this to proper error handling")
+			g.P("}")
+		}
 		g.P()
 	}
 
@@ -247,7 +265,11 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 			req = "req *" + g.QualifiedGoIdent(method.Input.GoIdent) + ", "
 		}
 		if method.Output.Location.SourceFile != emptyPb {
-			resp = "*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", "
+			var prefix string
+			if isUsingBroadcasting(method) {
+				prefix = "[]"
+			}
+			resp = prefix + "*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", "
 		}
 		g.AnnotateSymbol(cliName+"."+method.GoName, protogen.Annotation{Location: method.Location})
 		g.P(method.Comments.Leading, method.GoName, "(", req, "opts ...CallOption) (", resp, "error)")
@@ -363,7 +385,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P()
 
 	// Generate request function
-	g.P("func request[T any](conn *", natsConn, ", timeout ", timeDuration, ", subject string, collector func([]byte, ", timeDuration, ") (*T, error)) ([]*T, error) {")
+	g.P("func request[T any](conn *", natsConn, ", timeout ", timeDuration, ", subject string, data []byte, collector func([]byte, ", timeDuration, ") (*T, error)) ([]*T, error) {")
 	g.P("ctx, cancel := ", protogen.GoImportPath("context").Ident("WithTimeout"), "(", protogen.GoImportPath("context").Ident("Background"), "(), timeout)")
 	g.P("defer cancel()")
 	g.P()
@@ -395,10 +417,12 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("}")
 	g.P()
 	g.P("timer.Reset(300 * ", timePkg.Ident("Millisecond"), ")")
+	g.P("if collector != nil {")
 	g.P("if col, err := collector(msg.Data, rtt); err != nil {")
 	g.P("errs <- err")
 	g.P("} else {")
 	g.P("res = append(res, col)")
+	g.P("}")
 	g.P("}")
 	g.P("})")
 	g.P("if err != nil {")
@@ -407,7 +431,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("defer sub.Unsubscribe()")
 	g.P()
 	g.P("start = ", timePkg.Ident("Now"), "()")
-	g.P("err = conn.PublishRequest(subject, sub.Subject, nil)")
+	g.P("err = conn.PublishRequest(subject, sub.Subject, data)")
 	g.P("if err != nil {")
 	g.P("return nil, err")
 	g.P("}")
@@ -416,9 +440,8 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("case err = <-errs:")
 	g.P("return nil, err")
 	g.P("case <-ctx.Done():")
-	g.P("}")
-	g.P()
 	g.P("return res, nil")
+	g.P("}")
 	g.P("}")
 	g.P()
 
@@ -438,6 +461,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 		if _, ok := reservedKeywords[strings.ToLower(method.GoName)]; ok {
 			continue
 		}
+		broadcasting := isUsingBroadcasting(method)
 
 		var req, resp, handleReq, handleResp, returnResp string
 		if method.Input.Location.SourceFile != emptyPb {
@@ -447,7 +471,11 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 			handleReq = "nil"
 		}
 		if method.Output.Location.SourceFile != emptyPb {
-			resp = "*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", "
+			var prefix string
+			if broadcasting {
+				prefix = "[]"
+			}
+			resp = prefix + "*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", "
 			handleResp = "&response"
 			returnResp = "&response, "
 		} else {
@@ -456,22 +484,58 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 		}
 		g.P("func (c *", unexport(cliName), ") ", method.GoName, "(", req, "opts ...CallOption) (", resp, "error) {")
 		g.P("options := process(opts...)")
-		if method.Output.Location.SourceFile != emptyPb {
+		if method.Output.Location.SourceFile != emptyPb && !broadcasting {
 			g.P("var response ", method.Output.GoIdent)
 		}
-		g.P("var err error")
-		g.P()
+		if !broadcasting {
+			g.P("var err error")
+			g.P()
+		}
 		g.P("timeout := c.timeout")
 		g.P("if options.timeout != 0 {")
 		g.P("	timeout = options.timeout")
 		g.P("}")
 		g.P()
-		g.P("if options.hasInstanceID() {")
-		g.P("err = c.handle(", handleReq, ", ", strconv.Quote(subjectName(service, method)+"."), " + options.instanceID, ", handleResp, ", timeout)")
-		g.P("} else {")
-		g.P("err = c.handle(", handleReq, ", ", strconv.Quote(subjectName(service, method)), ", ", handleResp, ", timeout)")
-		g.P("}")
-		g.P("return ", returnResp, "err")
+		if broadcasting {
+			var input string
+			if method.Input.Location.SourceFile != emptyPb {
+				var returnResp string
+				if method.Output.Location.SourceFile != emptyPb {
+					returnResp = "nil, "
+				}
+				g.P("var data []byte")
+				g.P("if req != nil {")
+				g.P("var err error")
+				g.P("if data, err = ", protoMarshal, "(req); err != nil {")
+				g.P("return ", returnResp, goNatsPkg.Ident("ErrMarshallingFailed"))
+				g.P("}")
+				g.P("}")
+				input = "data"
+			} else {
+				input = "nil"
+			}
+
+			if method.Output.Location.SourceFile != emptyPb {
+				g.P("objs, err := request(c.nc, timeout, ", strconv.Quote(subjectName(service, method)), ",", input, ", func(data []byte, rtt ", timeDuration, ") (*", method.Output.GoIdent, ", error) {")
+				g.P("var obj ", method.Output.GoIdent)
+				g.P("if err := ", protoUnmarshal, "(data, &obj); err != nil {")
+				g.P("return nil, err")
+				g.P("}")
+				g.P("return &obj, nil")
+				g.P("})")
+				g.P("return objs, err")
+			} else {
+				g.P("_, err := request[struct{}](c.nc, timeout, ", strconv.Quote(subjectName(service, method)), ", ", input, ", nil)")
+				g.P("return err")
+			}
+		} else {
+			g.P("if options.hasInstanceID() {")
+			g.P("err = c.handle(", handleReq, ", ", strconv.Quote(subjectName(service, method)+"."), " + options.instanceID, ", handleResp, ", timeout)")
+			g.P("} else {")
+			g.P("err = c.handle(", handleReq, ", ", strconv.Quote(subjectName(service, method)), ", ", handleResp, ", timeout)")
+			g.P("}")
+			g.P("return ", returnResp, "err")
+		}
 		g.P("}")
 		g.P()
 	}
@@ -498,7 +562,7 @@ func generateReqFunc(g *protogen.GeneratedFile, cliName, goName, method string, 
 	g.P("subject = ", protogen.GoImportPath("fmt").Ident("Sprintf"), "(\"%s.%s.%s\", ", microPkg.Ident("APIPrefix"), ", ", verb, ", ", strconv.Quote(goName), ")")
 	g.P("}")
 
-	g.P("objs, err := request(c.nc, timeout, subject, func(data []byte, rtt ", timeDuration, ") (*", T, ", error) {")
+	g.P("objs, err := request(c.nc, timeout, subject, nil, func(data []byte, rtt ", timeDuration, ") (*", T, ", error) {")
 	g.P("var obj ", T)
 	g.P("if err := ", protogen.GoImportPath("encoding/json").Ident("Unmarshal"), "(data, &obj); err != nil {")
 	g.P("return nil, err")
@@ -508,10 +572,7 @@ func generateReqFunc(g *protogen.GeneratedFile, cliName, goName, method string, 
 	}
 	g.P("return &obj, nil")
 	g.P("})")
-	g.P("if err != nil {")
-	g.P("return nil, err")
-	g.P("}")
-	g.P("return objs, nil")
+	g.P("return objs, err")
 	g.P("}")
 	g.P()
 }
