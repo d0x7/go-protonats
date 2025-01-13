@@ -140,7 +140,122 @@ type ConductorServiceNATSServer interface {
     NoRequestNoResponse() (error)
     // [...]
 }
-````
+```
+
+### Broadcasting
+
+If you want to broadcast a message to all instances of a service, you can set the `go_nats.broadcast` option to true in the method definition.
+This will generate a method in the client that will broadcast the message to all instances of the service.
+
+The issue with that is, it requires the client to have the `go_nats.proto` imported, but can be easily done, by appending this to your protoc generation command:
+
+```shell
+-I$(go list -m -f '{{ .Dir }}' xiam.li/go-nats)/proto
+```
+
+This takes the local directory of the `go-nats` module and adds it as a import path for proto, so that it can find the `go_nats.proto` file in there.
+You can now use it like this:
+
+```protobuf
+syntax = "proto3";
+package your.package;
+import "google/protobuf/empty.proto";
+import "go_nats.proto";
+option go_package = "github.com/user/repo/pb;pb";
+
+service BroadcastingService {
+  rpc ABroadcastingMethod(HelloWorldRequest) returns (HelloWorldResponse) {
+    option (go_nats.broadcast) = true;
+  }
+  rpc FanOut(HelloWorldRequest) returns (google.protobuf.Empty) {
+    option (go_nats.broadcast) = true;
+  }
+  rpc FanIn(google.protobuf.Empty) returns (HelloWorldResponse) {
+    option (go_nats.broadcast) = true;
+  }
+  rpc VeryEmptyMethod(google.protobuf.Empty) returns (google.protobuf.Empty) {
+    option (go_nats.broadcast) = true;
+  }
+}
+```
+
+When using broadcast, it will also honour your usage of `google.protobuf.Empty`, so that these methods won't generate a parameter to be passed as request/response, depending on how the RPC is defined.
+Although there are opts available for these methods, the only one used is the timeout and passing an instance id does nothing.
+
+You can use it like this on the server side:
+
+```go
+type impl struct {
+	srv micro.Service
+	err bool
+}
+
+func (i *impl) ABroadcastingMethod(req *pb.HelloWorldRequest) (*pb.HelloWorldResponse, error) {
+	return &pb.Test{Message: "Hello " + req.GetName() + ", welcome to a broadcasting response from " + i.srv.Info().ID}, nil
+}
+
+func (i *impl) FanOut(req *pb.HelloWorldRequest) error {
+	// Do something with the request and then return to confirm the request was received
+	return nil
+}
+
+func (i *impl) FanIn() (*pb.HelloWorldResponse, error) {
+	// Do something and then return a response
+	return &pb.HelloWorldResponse{Message: "Hello FanIn response from " + i.srv.Info().ID}, nil
+}
+
+func (i *impl) VeryEmptyMethod() error {
+	// Do something
+	return nil
+}
+
+func main() {
+	nc, err := nats.Connect(nats.DefaultURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to NATS: %v", err)
+	}
+	srvImpl := &impl{}
+	srv := broadcast.NewBroadcastingServiceNATSServer(nc, srvImpl)
+	srvImpl.srv = srv
+
+	log.Println("Server started")
+	for {
+		if !srv.Stopped() {
+			time.Sleep(time.Second)
+		} else {
+			return
+		}
+	}
+}
+```
+
+And on the client:
+
+```go
+nc, err := nats.Connect(nats.DefaultURL)
+if err != nil {
+    log.Fatalf("Failed to connect to NATS: %v", err)
+}
+cli := broadcast.NewBroadcastingServiceNATSClient(nc)
+responses, serviceErrs, err := cli.ABroadcastingMethod(&pb.HelloWorldRequest{Name: "John Doe"})
+if err != nil {
+    log.Fatalf("Failed to call ABroadcastingMethod: %v", err)
+}
+if serviceErrs != nil {
+    log.Println("Some services returned an error:")
+    for i, serviceErr := range serviceErrs {
+        log.Printf("Service Error %d/%d: %v\n", i+1, len(serviceErrs), serviceErr)
+    }
+}
+log.Printf("Broadcast Responses")
+for i, response := range responses {
+    log.Printf("Response %d/%d: %v\n", i+1, len(responses), response)
+}
+// Or similar-ish for methods using the empty type
+serviceErrs, errs = cli.VeryEmptyMethod()
+responses, serviceErrs, errs = cli.FanIn()
+serviceErrs, errs = cli.FanOut(&pb.HelloWorldRequest{Name: "John Doe"})
+```
 
 ### Custom Errors
 
