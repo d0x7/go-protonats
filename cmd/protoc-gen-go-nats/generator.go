@@ -115,25 +115,8 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("}")
 	g.P()
 
-	// Generate server options
-	g.P("type ServerOption func(config *", microConfig, ")")
-
-	// Generate server option functions
-	for _, typ := range []string{"StatsHandler", "DoneHandler", "ErrHandler"} {
-		field := typ
-		if typ == "ErrHandler" {
-			field = "ErrorHandler"
-		}
-		g.P("func With", field, "(handler ", microPkg.Ident(typ), ") ServerOption {")
-		g.P("return func(config *", microConfig, ") {")
-		g.P("config.", field, " = handler")
-		g.P("}")
-		g.P("}")
-		g.P()
-	}
-
 	// Generate NewServer function
-	g.P("func New", srvName, "(nc *", natsConn, ", impl ", srvName, ", opts ...ServerOption) ", microPkg.Ident("Service"), " {")
+	g.P("func New", srvName, "(nc *", natsConn, ", impl ", srvName, ", opts ...", goNatsPkg.Ident("ServerOption"), ") ", microPkg.Ident("Service"), " {")
 	g.P("config := ", microConfig, "{")
 	g.P("Name: ", strconv.Quote(service.GoName), ",")
 	g.P("Version: ", strconv.Quote("1.0.0"), ",")
@@ -276,65 +259,22 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 		}
 		g.AnnotateSymbol(cliName+"."+method.GoName, protogen.Annotation{Location: method.Location})
 		if broadcasting {
-			g.P(method.Comments.Leading, method.GoName, "(", req, "opts ...CallOption) (", resp, "[]", goNatsPkg.Ident("ServiceError"), ", error)")
+			g.P(method.Comments.Leading, method.GoName, "(", req, "opts ...", goNatsPkg.Ident("CallOption"), ") (", resp, "[]", goNatsPkg.Ident("ServiceError"), ", error)")
 		} else {
-			g.P(method.Comments.Leading, method.GoName, "(", req, "opts ...CallOption) (", resp, "error)")
+			g.P(method.Comments.Leading, method.GoName, "(", req, "opts ...", goNatsPkg.Ident("CallOption"), ") (", resp, "error)")
 		}
 	}
 	g.P("SetTimeout(", timeDuration, ")")
 	g.P("// ListInstances returns a list containing all instances of this service")
-	g.P("// This is a convenience method that calls Ping with no options")
-	g.P("ListInstances() ([]*Ping, error)")
+	g.P("// This is a convenience method that calls ", goNatsPkg.Ident("Ping"), " with no options")
+	g.P("ListInstances() ([]*", goNatsPkg.Ident("Ping"), ", error)")
 	g.P("// Ping sends a ping to either all instances or a specific instance of this service")
-	g.P("Ping(opts ...CallOption) ([]*Ping, error)")
+	g.P("Ping(opts ...", goNatsPkg.Ident("CallOption"), ") ([]*", goNatsPkg.Ident("Ping"), ", error)")
 	g.P("// Stats returns the stats of either all instances or a specific instance of this service")
-	g.P("Stats(opts ...CallOption) ([]*micro.Stats, error)")
+	g.P("Stats(opts ...", goNatsPkg.Ident("CallOption"), ") ([]*micro.Stats, error)")
 	g.P("// Info returns the info of either all instances or a specific instance of this service")
-	g.P("Info(opts ...CallOption) ([]*micro.Info, error)")
+	g.P("Info(opts ...", goNatsPkg.Ident("CallOption"), ") ([]*micro.Info, error)")
 	g.P("}")
-	g.P()
-
-	// Generate Ping struct
-	g.P("type Ping struct {")
-	g.P(microPkg.Ident("ServiceIdentity"))
-	g.P("Type string")
-	g.P("RTT ", timeDuration)
-	g.P("}")
-	g.P()
-
-	// Generate CallOption type and functions
-	g.P("//region CallOptions")
-	g.P("type CallOption func(*callOptions)")
-	g.P()
-	g.P("type callOptions struct {")
-	g.P("instanceID string")
-	g.P("timeout ", timeDuration)
-	g.P("}")
-	g.P()
-	g.P("func (opts *callOptions) hasInstanceID() bool {")
-	g.P("return opts.instanceID != \"\"")
-	g.P("}")
-	g.P()
-	g.P("func WithInstanceID(id string) CallOption {")
-	g.P("return func(opts *callOptions) {")
-	g.P("opts.instanceID = id")
-	g.P("}")
-	g.P("}")
-	g.P()
-	g.P("func WithTimeout(timeout ", timeDuration, ") CallOption {")
-	g.P("return func(options *callOptions) {")
-	g.P("options.timeout = timeout")
-	g.P("}")
-	g.P("}")
-	g.P()
-	g.P("func process(opts ...CallOption) callOptions {")
-	g.P("options := callOptions{}")
-	g.P("for _, opt := range opts {")
-	g.P("opt(&options)")
-	g.P("}")
-	g.P("return options")
-	g.P("}")
-	g.P("//endregion")
 	g.P()
 
 	// Generate client struct implementation
@@ -353,15 +293,15 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P()
 
 	// Generate ListInstances function
-	g.P("func (c *", unexport(cliName), ") ListInstances() ([]*Ping, error) {")
+	g.P("func (c *", unexport(cliName), ") ListInstances() ([]*", goNatsPkg.Ident("Ping"), ", error) {")
 	g.P("return c.Ping()")
 	g.P("}")
 	g.P()
 
-	// Generate Ping/Stats/Info functions
+	// Generate ",goNatsPkg.Ident("Ping"),"/Stats/Info functions
 	generateReqFunc(g, cliName, service.GoName, "Stats", microPkg.Ident("Stats"), microPkg.Ident("StatsVerb"))
 	generateReqFunc(g, cliName, service.GoName, "Info", microPkg.Ident("Info"), microPkg.Ident("InfoVerb"))
-	generateReqFunc(g, cliName, service.GoName, "Ping", "Ping", microPkg.Ident("PingVerb"))
+	generateReqFunc(g, cliName, service.GoName, "Ping", goNatsPkg.Ident("Ping"), microPkg.Ident("PingVerb"))
 
 	// Generate handle function
 	g.P("func (c *", unexport(cliName), ") handle(req ", protoMessage, ", subject string, out ", protoMessage, ", timeout ", timeDuration, ") (err error) {")
@@ -497,11 +437,14 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 			returnResp = ""
 		}
 		if broadcasting {
-			g.P("func (c *", unexport(cliName), ") ", method.GoName, "(", req, "opts ...CallOption) (", resp, "[]", goNatsPkg.Ident("ServiceError"), ", error) {")
+			g.P("func (c *", unexport(cliName), ") ", method.GoName, "(", req, "opts ...", goNatsPkg.Ident("CallOption"), ") (", resp, "[]", goNatsPkg.Ident("ServiceError"), ", error) {")
 		} else {
-			g.P("func (c *", unexport(cliName), ") ", method.GoName, "(", req, "opts ...CallOption) (", resp, "error) {")
+			g.P("func (c *", unexport(cliName), ") ", method.GoName, "(", req, "opts ...", goNatsPkg.Ident("CallOption"), ") (", resp, "error) {")
 		}
-		g.P("options := process(opts...)")
+		g.P("options := ", goNatsPkg.Ident("ProcessCallOptions"), "(opts...)")
+		g.P("timeout := options.GetTimeoutOr(c.timeout)")
+		g.P()
+
 		if method.Output.Location.SourceFile != emptyPb && !broadcasting {
 			g.P("var response ", method.Output.GoIdent)
 		}
@@ -509,10 +452,6 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 			g.P("var err error")
 			g.P()
 		}
-		g.P("timeout := c.timeout")
-		g.P("if options.timeout != 0 {")
-		g.P("	timeout = options.timeout")
-		g.P("}")
 		g.P()
 		if broadcasting {
 			var input string
@@ -547,8 +486,8 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 				g.P("return serviceErrs, err")
 			}
 		} else {
-			g.P("if options.hasInstanceID() {")
-			g.P("err = c.handle(", handleReq, ", ", strconv.Quote(subjectName(service, method)+"."), " + options.instanceID, ", handleResp, ", timeout)")
+			g.P("if options.HasInstanceID() {")
+			g.P("err = c.handle(", handleReq, ", ", strconv.Quote(subjectName(service, method)+"."), " + options.GetInstanceID(), ", handleResp, ", timeout)")
 			g.P("} else {")
 			g.P("err = c.handle(", handleReq, ", ", strconv.Quote(subjectName(service, method)), ", ", handleResp, ", timeout)")
 			g.P("}")
@@ -563,19 +502,14 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 }
 
 func generateReqFunc(g *protogen.GeneratedFile, cliName, goName, method string, T any, verb any) {
-	g.P("func (c *", unexport(cliName), ") ", method, "(opts ...CallOption) ([]*", T, ", error) {")
-	g.P("options := process(opts...)")
+	g.P("func (c *", unexport(cliName), ") ", method, "(opts ...", goNatsPkg.Ident("CallOption"), ") ([]*", T, ", error) {")
+	g.P("options := ", goNatsPkg.Ident("ProcessCallOptions"), "(opts...)")
+	g.P("timeout := options.GetTimeoutOr(c.timeout)")
+	g.P()
+
 	g.P("var subject string")
-	g.P()
-
-	g.P("timeout := c.timeout")
-	g.P("if options.timeout != 0 {")
-	g.P("	timeout = options.timeout")
-	g.P("}")
-	g.P()
-
-	g.P("if options.hasInstanceID() {")
-	g.P("subject = ", protogen.GoImportPath("fmt").Ident("Sprintf"), "(\"%s.%s.%s.%s\", ", microPkg.Ident("APIPrefix"), ", ", verb, ", ", strconv.Quote(goName), ", options.instanceID)")
+	g.P("if options.HasInstanceID() {")
+	g.P("subject = ", protogen.GoImportPath("fmt").Ident("Sprintf"), "(\"%s.%s.%s.%s\", ", microPkg.Ident("APIPrefix"), ", ", verb, ", ", strconv.Quote(goName), ", options.GetInstanceID())")
 	g.P("} else {")
 	g.P("subject = ", protogen.GoImportPath("fmt").Ident("Sprintf"), "(\"%s.%s.%s\", ", microPkg.Ident("APIPrefix"), ", ", verb, ", ", strconv.Quote(goName), ")")
 	g.P("}")
