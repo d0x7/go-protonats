@@ -17,6 +17,7 @@ const (
 	slogPkg   = protogen.GoImportPath("log/slog")
 	protoPkg  = protogen.GoImportPath("google.golang.org/protobuf/proto")
 	goNatsPkg = protogen.GoImportPath("xiam.li/go-nats")
+	errorsPkg = protogen.GoImportPath("errors")
 )
 
 var (
@@ -198,7 +199,8 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 		}
 		g.P(handlerResp, "err := impl.", method.GoName, "(", handlerReq, ")")
 		g.P("if err != nil {")
-		g.P("if serverErr, ok := err.(", goNatsPkg.Ident("ServerError"), "); ok {")
+		g.P("var serverErr ", goNatsPkg.Ident("ServerError"))
+		g.P("if ", errorsPkg.Ident("As"), "(err, &serverErr) {")
 		g.P("request.Error(serverErr.Code, serverErr.Description, serverErr.GetWrapped(), serverErr.GetOptHeaders())")
 		g.P("} else {")
 		g.P("request.Error(", strconv.Quote("500"), ", ", strconv.Quote("Internal server error"), ", []byte(err.Error()))")
