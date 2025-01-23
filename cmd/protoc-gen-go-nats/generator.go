@@ -86,8 +86,18 @@ func isUsingBroadcasting(method *protogen.Method) bool {
 	return extension.(bool)
 }
 
+func getConsensusTarget(method *protogen.Method) *gonats_proto.ConsensusTarget {
+	if !proto.HasExtension(method.Desc.Options(), gonats_proto.E_ConsensusTarget) {
+		return nil
+	}
+	extension := proto.GetExtension(method.Desc.Options(), gonats_proto.E_ConsensusTarget).(gonats_proto.ConsensusTarget)
+	return &extension
+}
+
 func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 	srvName := service.GoName + "NATSServer"
+
+	var leaderMethods, followerMethods []string
 
 	// Generate server interface
 	g.P("//region Server")
@@ -110,45 +120,76 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 		if method.Output.Location.SourceFile != emptyPb {
 			resp = "*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", "
 		}
-		g.P(method.Comments.Leading, method.GoName, "(", req, ") (", resp, "error)")
+		fn := fmt.Sprintf("%s%s(%s) (%serror)", method.Comments.Leading, method.GoName, req, resp)
+
+		consensusTarget := getConsensusTarget(method)
+		if consensusTarget != nil {
+			g.P("// ", method.GoName, " is a consensus-based method with target ", consensusTarget)
+			if *consensusTarget == gonats_proto.ConsensusTarget_LEADER {
+				leaderMethods = append(leaderMethods, fn)
+				//leaderMethods = append(leaderMethods, []any{method.Comments.Leading, method.GoName, "(", req, ") (", resp, "error)"})
+			} else {
+				followerMethods = append(followerMethods, fn)
+				//followerMethods = append(followerMethods, []any{method.Comments.Leading, method.GoName, "(", req, ") (", resp, "error)"})
+			}
+		} else {
+			g.P(fn)
+			//g.P(method.Comments.Leading, method.GoName, "(", req, ") (", resp, "error)")
+		}
 	}
+	if len(leaderMethods) > 0 {
+		g.P(service.GoName, "NATSLeaderServer")
+	}
+	if len(followerMethods) > 0 {
+		g.P(service.GoName, "NATSFollowerServer")
+	}
+
 	g.P("}")
 	g.P()
 
-	// Generate NewServer function
+	// Generate Follower/leader interface if there are any consensus-based methods
+	if len(leaderMethods) > 0 {
+		g.P("type ", service.GoName, "NATSLeaderServer interface {")
+		for _, method := range leaderMethods {
+			g.P(method)
+		}
+		g.P("}")
+		g.P()
+	}
+	if len(followerMethods) > 0 {
+		g.P("type ", service.GoName, "NATSFollowerServer interface {")
+		for _, method := range followerMethods {
+			g.P(method)
+		}
+		g.P("}")
+		g.P()
+	}
+
+	// Gen
 	g.P("func New", srvName, "(nc *", natsConn, ", impl ", srvName, ", opts ...", goNatsPkg.Ident("ServerOption"), ") ", microPkg.Ident("Service"), " {")
-	g.P("config := ", microConfig, "{")
-	g.P("Name: ", strconv.Quote(service.GoName), ",")
-	g.P("Version: ", strconv.Quote("1.0.0"), ",")
-	g.P("}")
-	g.P()
-
-	g.P("// Check if the service implements any of the handler interfaces")
-	g.P("// but do it before applying options, so these can still override the handlers")
-	g.P("if statsHandler, isStatsHandler := impl.(", goNatsPkg.Ident("StatsHandler"), "); isStatsHandler {")
-	g.P("config.StatsHandler = statsHandler.Stats")
-	g.P(debugLogger, "(\"Service implements StatsHandler; using service's Stats method\")")
-	g.P("}")
-	g.P("if doneHandler, isDoneHandler := impl.(", goNatsPkg.Ident("DoneHandler"), "); isDoneHandler {")
-	g.P("config.DoneHandler = doneHandler.Done")
-	g.P(debugLogger, "(\"Service implements DoneHandler; using service's Done method\")")
-	g.P("}")
-	g.P("if errHandler, isErrHandler := impl.(", goNatsPkg.Ident("ErrHandler"), "); isErrHandler {")
-	g.P("config.ErrorHandler = errHandler.Err")
-	g.P(debugLogger, "(\"Service implements ErrHandler; using service's Err method\")")
-	g.P("}")
-	g.P()
-
-	g.P("// Apply options")
-	g.P("for _, opt := range opts {")
-	g.P("opt(&config)")
-	g.P("}")
-	g.P()
-	g.P("// Create the service")
-	g.P("service, err := micro.AddService(nc, config)")
+	g.P("service, options, err := ", goNatsPkg.Ident("NewService"), "(", strconv.Quote(service.GoName), ", nc, impl, opts...)")
 	g.P("if err != nil {")
 	g.P("panic(err) // TODO: Update this to proper error handling")
 	g.P("}")
+	g.P("_new", service.GoName, "Server(service, impl)")
+	g.P()
+
+	if len(leaderMethods) > 0 {
+		g.P("if !options.WithoutLeaderFns {")
+		g.P("_new", service.GoName, "LeaderServer(service, impl)")
+		g.P("}")
+	}
+	if len(followerMethods) > 0 {
+		g.P("if !options.WithoutFollowerFns {")
+		g.P("_new", service.GoName, "FollowerServer(service, impl)")
+		g.P("}")
+	}
+	g.P("return service")
+	g.P("}")
+
+	g.P("func _new", service.GoName, "Server(service micro.Service, impl ", service.GoName, "NATSServer) {")
+	g.P("var err error")
+	g.P("_ = err") // In case there are no more methods so that err isn't unused
 	g.P()
 
 	// Generate service endpoints
@@ -162,69 +203,144 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 		if _, ok := reservedKeywords[strings.ToLower(method.GoName)]; ok {
 			continue
 		}
-
-		handler := method.GoName + "Handler"
-		g.P(handler, " := ", microPkg.Ident("HandlerFunc"), "(func(request ", microRequest, ") {")
-
-		var handlerReq string
-		if method.Input.Location.SourceFile != emptyPb {
-			handlerReq = "&req"
-			g.P("var req ", method.Input.GoIdent)
-			g.P("if err := ", protoUnmarshal, "(request.Data(), &req); err != nil {")
-			g.P("request.Error(", strconv.Quote("560"), ", ", strconv.Quote("Failed to unmarshal proto message"), ", []byte(err.Error()))")
-			g.P("return")
-			g.P("}")
-			g.P()
+		if getConsensusTarget(method) != nil {
+			continue
 		}
-		var handlerResp string
-		if method.Output.Location.SourceFile != emptyPb {
-			handlerResp = "response, "
-		}
-		g.P(handlerResp, "err := impl.", method.GoName, "(", handlerReq, ")")
+
+		generateEndpointHandler(g, service, method)
+	}
+
+	g.P("}")
+	g.P()
+
+	if len(leaderMethods) > 0 {
+		g.P("func New", service.GoName, "NATSLeaderServer(nc *", natsConn, ", impl ", service.GoName, "NATSLeaderServer, opts ...", goNatsPkg.Ident("ServerOption"), ") ", microPkg.Ident("Service"), " {")
+		g.P("service, _, err := ", goNatsPkg.Ident("NewService"), "(", strconv.Quote(service.GoName), ", nc, impl, opts...)")
 		g.P("if err != nil {")
-		g.P("var serverErr ", goNatsPkg.Ident("ServerError"))
-		g.P("if ", errorsPkg.Ident("As"), "(err, &serverErr) {")
-		g.P("request.Error(serverErr.Code, serverErr.Description, serverErr.GetWrapped(), serverErr.GetOptHeaders())")
-		g.P("} else {")
-		g.P("request.Error(", strconv.Quote("500"), ", ", strconv.Quote("Internal server error"), ", []byte(err.Error()))")
+		g.P("panic(err) // TODO: Update this to proper error handling")
 		g.P("}")
-		g.P("return")
+		g.P("_new", service.GoName, "LeaderServer(service, impl)")
+		g.P("return service")
 		g.P("}")
 		g.P()
-		if method.Output.Location.SourceFile != emptyPb {
-			g.P("data, err := ", protoMarshal, "(response)")
-			g.P("if err != nil {")
-			g.P("request.Error(", strconv.Quote("560"), ", ", strconv.Quote("Failed to marshal proto message"), ", []byte(err.Error()))")
-			g.P("return")
-			g.P("}")
-			g.P("request.Respond(data)")
-		} else {
-			g.P("request.Respond(nil)")
-		}
-		g.P("})")
 
-		if isUsingBroadcasting(method) {
-			// Add a broadcast endpoint for the method
-			g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Broadcast"), ", ", handler, ", ", microPkg.Ident("WithEndpointQueueGroup"), "(", nuidPkg.Ident("Next"), "()), ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)), "))")
-		} else {
-			// Add a shared endpoint for the method
-			g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName), ", ", handler, ", ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)), "))")
-			g.P("if err != nil {")
-			g.P("panic(err) // TODO: Update this to proper error handling")
-			g.P("}")
+		g.P("func _new", service.GoName, "LeaderServer(service micro.Service, impl ", service.GoName, "NATSLeaderServer) {")
+		g.P("var err error")
+		g.P("_ = err") // In case there are no more methods so that err isn't unused
 
-			// Add a direct endpoint for the method
-			g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Direct"), ", ", handler, ", ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)+"."), " + service.Info().ID))")
-			g.P("if err != nil {")
-			g.P("panic(err) // TODO: Update this to proper error handling")
-			g.P("}")
+		for _, method := range service.Methods {
+			if method.Desc.IsStreamingClient() || method.Desc.IsStreamingServer() {
+				// TODO: Skipping currently unsupported streaming methods for now
+				continue
+			}
+			// Check if method.GoName is in reservedKeywords
+			if _, ok := reservedKeywords[strings.ToLower(method.GoName)]; ok {
+				continue
+			}
+			if target := getConsensusTarget(method); target == nil || *target != gonats_proto.ConsensusTarget_LEADER {
+				continue
+			}
+
+			generateEndpointHandler(g, service, method)
 		}
+		g.P("}")
 		g.P()
 	}
 
-	g.P("return service")
-	g.P("}")
+	if len(followerMethods) > 0 {
+		g.P("func New", service.GoName, "NATSFollowerServer(nc *", natsConn, ", impl ", service.GoName, "NATSFollowerServer, opts ...", goNatsPkg.Ident("ServerOption"), ") ", microPkg.Ident("Service"), " {")
+		g.P("service, _, err := ", goNatsPkg.Ident("NewService"), "(", strconv.Quote(service.GoName), ", nc, impl, opts...)")
+		g.P("if err != nil {")
+		g.P("panic(err) // TODO: Update this to proper error handling")
+		g.P("}")
+		g.P("_new", service.GoName, "FollowerServer(service, impl)")
+		g.P("return service")
+		g.P("}")
+		g.P()
+
+		g.P("func _new", service.GoName, "FollowerServer(service micro.Service, impl ", service.GoName, "NATSFollowerServer) {")
+		g.P("var err error")
+		g.P("_ = err") // In case there are no more methods so that err isn't unused
+
+		for _, method := range service.Methods {
+			if method.Desc.IsStreamingClient() || method.Desc.IsStreamingServer() {
+				// TODO: Skipping currently unsupported streaming methods for now
+				continue
+			}
+			// Check if method.GoName is in reservedKeywords
+			if _, ok := reservedKeywords[strings.ToLower(method.GoName)]; ok {
+				continue
+			}
+			if target := getConsensusTarget(method); target == nil || *target != gonats_proto.ConsensusTarget_FOLLOWER {
+				continue
+			}
+
+			generateEndpointHandler(g, service, method)
+		}
+		g.P("}")
+		g.P()
+	}
 	g.P("//endregion")
+}
+
+func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method) {
+	handler := method.GoName + "Handler"
+	g.P(handler, " := ", microPkg.Ident("HandlerFunc"), "(func(request ", microRequest, ") {")
+
+	var handlerReq string
+	if method.Input.Location.SourceFile != emptyPb {
+		handlerReq = "&req"
+		g.P("var req ", method.Input.GoIdent)
+		g.P("if err := ", protoUnmarshal, "(request.Data(), &req); err != nil {")
+		g.P("request.Error(", strconv.Quote("560"), ", ", strconv.Quote("Failed to unmarshal proto message"), ", []byte(err.Error()))")
+		g.P("return")
+		g.P("}")
+		g.P()
+	}
+	var handlerResp string
+	if method.Output.Location.SourceFile != emptyPb {
+		handlerResp = "response, "
+	}
+	g.P(handlerResp, "err := impl.", method.GoName, "(", handlerReq, ")")
+	g.P("if err != nil {")
+	g.P("var serverErr ", goNatsPkg.Ident("ServerError"))
+	g.P("if ", errorsPkg.Ident("As"), "(err, &serverErr) {")
+	g.P("request.Error(serverErr.Code, serverErr.Description, serverErr.GetWrapped(), serverErr.GetOptHeaders())")
+	g.P("} else {")
+	g.P("request.Error(", strconv.Quote("500"), ", ", strconv.Quote("Internal server error"), ", []byte(err.Error()))")
+	g.P("}")
+	g.P("return")
+	g.P("}")
+	g.P()
+	if method.Output.Location.SourceFile != emptyPb {
+		g.P("data, err := ", protoMarshal, "(response)")
+		g.P("if err != nil {")
+		g.P("request.Error(", strconv.Quote("560"), ", ", strconv.Quote("Failed to marshal proto message"), ", []byte(err.Error()))")
+		g.P("return")
+		g.P("}")
+		g.P("request.Respond(data)")
+	} else {
+		g.P("request.Respond(nil)")
+	}
+	g.P("})")
+
+	if isUsingBroadcasting(method) {
+		// Add a broadcast endpoint for the method
+		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Broadcast"), ", ", handler, ", ", microPkg.Ident("WithEndpointQueueGroup"), "(", nuidPkg.Ident("Next"), "()), ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)), "))")
+	} else {
+		// Add a shared endpoint for the method
+		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName), ", ", handler, ", ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)), "))")
+		g.P("if err != nil {")
+		g.P("panic(err) // TODO: Update this to proper error handling")
+		g.P("}")
+
+		// Add a direct endpoint for the method
+		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Direct"), ", ", handler, ", ", microPkg.Ident("WithEndpointSubject"), "(", strconv.Quote(subjectName(service, method)+"."), " + service.Info().ID))")
+		g.P("if err != nil {")
+		g.P("panic(err) // TODO: Update this to proper error handling")
+		g.P("}")
+	}
+	g.P()
 }
 
 func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {

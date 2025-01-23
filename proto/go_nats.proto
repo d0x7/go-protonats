@@ -6,7 +6,14 @@ import "google/protobuf/descriptor.proto";
 
 option go_package = "xiam.li/go-nats/proto";
 
-// Option used to mark a method as a broadcast method
+// Options used for the go-nats plugin.
 extend google.protobuf.MethodOptions {
   bool broadcast = 526714442; // Polynomial rolling hash of "xiam.li/go-nats/proto/broadcast"
+  ConsensusTarget consensus_target = 526714443;
+}
+
+// ConsensusTarget is an enum used to specify the target of a consensus-based operation.
+enum ConsensusTarget {
+  FOLLOWER = 0;
+  LEADER = 1;
 }
