@@ -127,14 +127,14 @@ service HelloWorldService {
 
 ```go
 // Client
-type ConductorServiceNATSClient interface {
+type HelloWorldServiceNATSClient interface {
     NoRequest(opts ...CallOption) (*HelloWorldResponse, error)
     NoResponse(req *HelloWorldResponse, opts ...CallOption) (error)
     NoRequestNoResponse(opts ...CallOption) (error)
     // [...]
 }
 // Server
-type ConductorServiceNATSServer interface {
+type HelloWorldServiceNATSServer interface {
     NoRequest() (*HelloWorldResponse, error)
     NoResponse(req *HelloWorldResponse) (error)
     NoRequestNoResponse() (error)
@@ -255,6 +255,49 @@ for i, response := range responses {
 serviceErrs, errs = cli.VeryEmptyMethod()
 responses, serviceErrs, errs = cli.FanIn()
 serviceErrs, errs = cli.FanOut(&pb.HelloWorldRequest{Name: "John Doe"})
+```
+
+### Consensus Integration
+
+If you use a consensus algorithm like Raft, you can use the `go_nats.consensus_Target` option to mark methods to be used only by the leader or follower.
+These methods will be generated onto a separate interface, which is composited onto the main service interface.
+By default, the normal `NewYourServiceNATSServer` method will still register all methods, regardless of it the target is leader or follower, but you can use the specialized `NewYourServiceNATSLeaderServer` or `NewYourServiceNATSFollowerServer` methods to only register a server for either methods - or you can use the normal `[...]NATSServer` method and pass either a `go_nats.WithoutLeaderFns()` or `go_nats.WithoutFollowerFns()` to disable the registration of these, but still allow for the normal methods to be registered.
+
+Methods marked with a consensus can still use the broadcasting flag, which will for example make a call to that method broadcast to all followers, instead of only one follower. 
+
+To mark methods with a consensus target, use the `go_nats.consensus_target` option in the method definition:
+
+```protobuf
+service ConsensusService {
+  // The CurrentSnapshot method will only be called on the leader
+  rpc CurrentSnapshot(google.protobuf.Empty) returns (Snapshot) {
+    option (go_nats.consensus_target) = LEADER;
+  }
+  // And the ApplyChange will be sent to all followers, because it's also a broadcast
+  rpc ApplyChange(Snapshot) returns (google.protobuf.Empty) {
+    option (go_nats.consensus_target) = FOLLOWER;
+    option (go_nats.broadcast) = true;
+  }
+}
+```
+
+```go
+// Full implementation, normal methods, leader methods and follower methods
+_ = consensus.NewConsensusServiceNATSServer(conn, impl)
+
+// Normal implementation with follower methods, but leader methods unimplemented
+_ = consensus.NewConsensusServiceNATSServer(conn, impl, go_nats.WithoutLeaderFns())
+
+// Normal implementation with leader methods, but follower methods unimplemented
+_ = consensus.NewConsensusServiceNATSServer(conn, impl, go_nats.WithoutFollowerFns())
+
+// Follower-only implementation - only those marked as follower methods will be registered 
+// Notice the use of the [...]NATSFollowerServer interface instead the broader [...]NATSServer interface
+_ = consensus.NewConsensusServiceNATSFollowerServer(conn, impl)
+
+// Leader-only implementation - only those marked as leader methods will be registered
+// Notice the use of the [...]NATSLeaderServer interface instead the broader [...]NATSServer interface
+_ = consensus.NewConsensusServiceNATSLeaderServer(conn, impl)
 ```
 
 ### Custom Errors
