@@ -419,6 +419,37 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 	generateReqFunc(g, cliName, service.GoName, "Info", microPkg.Ident("Info"), microPkg.Ident("InfoVerb"))
 	generateReqFunc(g, cliName, service.GoName, "Ping", goNatsPkg.Ident("Ping"), microPkg.Ident("PingVerb"))
 
+	// Generate handle with retry function
+	g.P("func (c *", unexport(cliName), ") handleWithRetry(req ", protoMessage, ", subject string, out ", protoMessage, ", opts ...", goNatsPkg.Ident("CallOption"), ") (err error) {")
+	g.P("options := ", goNatsPkg.Ident("ProcessCallOptions"), "(opts...)")
+	g.P("timeout := options.GetTimeoutOr(c.timeout)")
+	g.P()
+	g.P("var tries int")
+	g.P("for {")
+	g.P("if options.HasInstanceID() {")
+	g.P("err = c.handle(req, subject+", strconv.Quote("."), "+options.GetInstanceID(), out, timeout)")
+	g.P("} else {")
+	g.P("err = c.handle(req, subject, out, timeout)")
+	g.P("}")
+	g.P("if err == nil || !errors.Is(err, ", natsPkg.Ident("ErrNoResponders"), ") {")
+	g.P("return")
+	g.P("}")
+	g.P("tries++")
+	g.P("if options.RetryContext().Err() != nil {")
+	g.P("err = ", errorsPkg.Ident("Join"), "(err, options.RetryContext().Err())")
+	g.P("return")
+	g.P("}")
+	g.P("if !options.ShouldRetry() {")
+	g.P("return")
+	g.P("}")
+	g.P("if tries >= options.MaxRetries() {")
+	g.P("err = ", errorsPkg.Ident("New"), "(", strconv.Quote("Failed to call service after max tries: "), "+ err.Error())")
+	g.P("return")
+	g.P("}")
+	g.P("time.Sleep(options.RetryDelay())")
+	g.P("}")
+	g.P("}")
+
 	// Generate handle function
 	g.P("func (c *", unexport(cliName), ") handle(req ", protoMessage, ", subject string, out ", protoMessage, ", timeout ", timeDuration, ") (err error) {")
 	g.P("var data []byte")
@@ -557,18 +588,18 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 		} else {
 			g.P("func (c *", unexport(cliName), ") ", method.GoName, "(", req, "opts ...", goNatsPkg.Ident("CallOption"), ") (", resp, "error) {")
 		}
-		g.P("options := ", goNatsPkg.Ident("ProcessCallOptions"), "(opts...)")
-		g.P("timeout := options.GetTimeoutOr(c.timeout)")
-		g.P()
+
+		if broadcasting {
+			g.P("options := ", goNatsPkg.Ident("ProcessCallOptions"), "(opts...)")
+			g.P("timeout := options.GetTimeoutOr(c.timeout)")
+			g.P()
+		}
 
 		if method.Output.Location.SourceFile != emptyPb && !broadcasting {
 			g.P("var response ", method.Output.GoIdent)
-		}
-		if !broadcasting {
-			g.P("var err error")
 			g.P()
 		}
-		g.P()
+
 		if broadcasting {
 			var input string
 			if method.Input.Location.SourceFile != emptyPb {
@@ -602,12 +633,14 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 				g.P("return serviceErrs, err")
 			}
 		} else {
-			g.P("if options.HasInstanceID() {")
-			g.P("err = c.handle(", handleReq, ", ", strconv.Quote(subjectName(service, method)+"."), " + options.GetInstanceID(), ", handleResp, ", timeout)")
-			g.P("} else {")
-			g.P("err = c.handle(", handleReq, ", ", strconv.Quote(subjectName(service, method)), ", ", handleResp, ", timeout)")
+			var errReturn = "nil, "
+			if method.Output.Location.SourceFile == emptyPb {
+				errReturn = ""
+			}
+			g.P("if err := c.handleWithRetry("+handleReq+", ", strconv.Quote(subjectName(service, method)), ", ", handleResp, ", opts...); err != nil {")
+			g.P("return ", errReturn, "err")
 			g.P("}")
-			g.P("return ", returnResp, "err")
+			g.P("return ", returnResp, "nil")
 		}
 		g.P("}")
 		g.P()

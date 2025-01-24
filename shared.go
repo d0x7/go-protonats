@@ -1,6 +1,7 @@
 package go_nats
 
 import (
+	"context"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/micro"
 	"log/slog"
@@ -14,8 +15,11 @@ type Ping struct {
 }
 
 type CallOpts struct {
-	instanceID string
-	timeout    time.Duration
+	instanceID   string
+	timeout      time.Duration
+	retries      int
+	retryDelay   time.Duration
+	retryContext context.Context
 }
 
 func (opts *CallOpts) HasInstanceID() bool {
@@ -41,6 +45,22 @@ func (opts *CallOpts) GetTimeoutOr(duration time.Duration) time.Duration {
 	return duration
 }
 
+func (opts *CallOpts) ShouldRetry() bool {
+	return opts.retries > 0 && opts.retryContext != nil
+}
+
+func (opts *CallOpts) RetryDelay() time.Duration {
+	return opts.retryDelay
+}
+
+func (opts *CallOpts) RetryContext() context.Context {
+	return opts.retryContext
+}
+
+func (opts *CallOpts) MaxRetries() int {
+	return opts.retries
+}
+
 type CallOption func(*CallOpts)
 
 func WithInstanceID(id string) CallOption {
@@ -52,6 +72,30 @@ func WithInstanceID(id string) CallOption {
 func WithTimeout(timeout time.Duration) CallOption {
 	return func(options *CallOpts) {
 		options.timeout = timeout
+	}
+}
+
+func WithRetry(ctx context.Context, minWait, maxWait time.Duration, maxTries int) CallOption {
+	return func(opts *CallOpts) {
+		if maxTries <= 0 {
+			return
+		}
+
+		retries := float64(maxTries)
+		minWaitf := float64(minWait.Milliseconds())
+		maxWaitf := float64(maxWait.Milliseconds())
+
+		totalMinWait := retries * minWaitf
+		if totalMinWait > maxWaitf {
+			panic("retries multiplied by minWait must be below maxWait")
+		}
+
+		extraTime := maxWaitf - totalMinWait
+		timePerRetry := minWaitf + (extraTime / retries)
+
+		opts.retries = maxTries
+		opts.retryContext = ctx
+		opts.retryDelay = time.Duration(timePerRetry) * time.Millisecond
 	}
 }
 
