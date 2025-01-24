@@ -1,4 +1,4 @@
-# protoc-gen-go-nats
+# protoc-gen-go-nats [![PkgGoDev](https://pkg.go.dev/badge/xiam.li/go-nats)](https://pkg.go.dev/xiam.li/go-nats)
 
 This is a protoc plugin that generates Go server and client code for NATS microservices.
 
