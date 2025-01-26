@@ -43,8 +43,8 @@ func AsServiceError(err error) (ServiceError, bool) {
 	return se, ok
 }
 
-// ServerError is a custom error type that can be used to return
-// a statuscode along with an error description and additional to the client.
+// ServerError is returned from functions when the server implementation returns an ServerError.
+// It contains a code, description, and an optional wrapped error.
 type ServerError struct {
 	Code, Description string
 	Wrapped           error
@@ -117,10 +117,13 @@ func (n ServerError) WithHeaders(headers map[string][]string) error {
 	return n
 }
 
+// NewServerErr creates a new ServerError with the given code and description.
+// To be used within the server implementation of your service, when an error occurs.
 func NewServerErr(code, description string) ServerError {
 	return WrapServerErr(nil, code, description)
 }
 
+// WrapServerErr wraps an existing error into a ServerError with the given code and description.
 func WrapServerErr(err error, code, description string) ServerError {
 	return ServerError{
 		Code:        code,
