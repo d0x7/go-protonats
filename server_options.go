@@ -39,6 +39,7 @@ type ServerOptions interface {
 	SetServiceVersion(string)
 	WithoutLeaderFns()
 	WithoutFollowerFns()
+	SetExtraSubject(string)
 }
 
 type ServerOption func(options ServerOptions)
@@ -76,5 +77,11 @@ func WithoutLeaderFns() ServerOption {
 func WithoutFollowerFns() ServerOption {
 	return func(options ServerOptions) {
 		options.WithoutFollowerFns()
+	}
+}
+
+func WithExtraSubject(extraSubject string) ServerOption {
+	return func(options ServerOptions) {
+		options.SetExtraSubject(extraSubject)
 	}
 }
