@@ -18,6 +18,7 @@ const (
 	goNatsPkg     = protogen.GoImportPath("xiam.li/go-nats")
 	goNatsImplPkg = protogen.GoImportPath("xiam.li/go-nats/impl")
 	errorsPkg     = protogen.GoImportPath("errors")
+	slogPkg       = protogen.GoImportPath("log/slog")
 )
 
 var (
@@ -312,6 +313,9 @@ func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Servic
 	}
 	g.P(handlerResp, "err := server.", method.GoName, "(", handlerReq, ")")
 	g.P("if err != nil {")
+	g.P("if ", goNatsPkg.Ident("IsServiceError"), "(err) {")
+	g.P(slogPkg.Ident("Warn"), "(", strconv.Quote("Server implementations should not return ServiceError, use go_nats.NewServerError instead"), ", ", strconv.Quote("error"), ", err)")
+	g.P("}")
 	g.P("var serverErr ", goNatsPkg.Ident("ServerError"))
 	g.P("if ", errorsPkg.Ident("As"), "(err, &serverErr) {")
 	g.P("request.Error(serverErr.Code, serverErr.Description, serverErr.GetWrapped(), serverErr.GetOptHeaders())")
