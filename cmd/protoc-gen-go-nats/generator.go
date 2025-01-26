@@ -159,12 +159,22 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P()
 	}
 
-	// Gen
+	// Generate SetId interface
+	g.P("type ", service.GoName, "Id interface {")
+	g.P("Set", service.GoName, "Id(string)")
+	g.P("}")
+	g.P()
+
+	// Generate NewServer function
 	g.P("func New", srvName, "(nc *", natsConn, ", server ", srvName, ", opts ...", goNatsPkg.Ident("ServerOption"), ") ", microPkg.Ident("Service"), " {")
 	g.P("service, options, err := ", goNatsImplPkg.Ident("NewService"), "(", strconv.Quote(service.GoName), ", nc, server, opts...)")
 	g.P("if err != nil {")
 	g.P("panic(err) // TODO: Update this to proper error handling")
 	g.P("}")
+	g.P("if setId, ok := server.(", service.GoName, "Id); ok {")
+	g.P("setId.Set", service.GoName, "Id(service.Info().ID)")
+	g.P("}")
+
 	g.P("_new", service.GoName, "Server(service, server, options)")
 	g.P()
 
@@ -206,11 +216,15 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("}")
 	g.P()
 
+	// Generate NewLeaderServer function
 	if len(leaderMethods) > 0 {
 		g.P("func New", service.GoName, "NATSLeaderServer(nc *", natsConn, ", server ", service.GoName, "NATSLeaderServer, opts ...", goNatsPkg.Ident("ServerOption"), ") ", microPkg.Ident("Service"), " {")
 		g.P("service, options, err := ", goNatsImplPkg.Ident("NewService"), "(", strconv.Quote(service.GoName), ", nc, server, opts...)")
 		g.P("if err != nil {")
 		g.P("panic(err) // TODO: Update this to proper error handling")
+		g.P("}")
+		g.P("if setId, ok := server.(", service.GoName, "Id); ok {")
+		g.P("setId.Set", service.GoName, "Id(service.Info().ID)")
 		g.P("}")
 		g.P("_new", service.GoName, "LeaderServer(service, server, options)")
 		g.P("return service")
@@ -239,11 +253,15 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P()
 	}
 
+	// Generate NewFollowerServer function
 	if len(followerMethods) > 0 {
 		g.P("func New", service.GoName, "NATSFollowerServer(nc *", natsConn, ", server ", service.GoName, "NATSFollowerServer, opts ...", goNatsPkg.Ident("ServerOption"), ") ", microPkg.Ident("Service"), " {")
 		g.P("service, options, err := ", goNatsImplPkg.Ident("NewService"), "(", strconv.Quote(service.GoName), ", nc, server, opts...)")
 		g.P("if err != nil {")
 		g.P("panic(err) // TODO: Update this to proper error handling")
+		g.P("}")
+		g.P("if setId, ok := server.(", service.GoName, "Id); ok {")
+		g.P("setId.Set", service.GoName, "Id(service.Info().ID)")
 		g.P("}")
 		g.P("_new", service.GoName, "FollowerServer(service, server, options)")
 		g.P("return service")
