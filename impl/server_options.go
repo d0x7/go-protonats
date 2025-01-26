@@ -67,11 +67,15 @@ func (opts *ServerOpts) SetExtraSubject(extraSubject string) {
 }
 
 func (opts *ServerOpts) Subject(subject, suffix string) micro.EndpointOpt {
-	if opts.ExtraSubject != "" {
-		subject += "." + opts.ExtraSubject
+	return micro.WithEndpointSubject(_subject(subject, opts.ExtraSubject, suffix))
+}
+
+func _subject(subject, extra, suffix string) string {
+	if extra != "" {
+		subject += "." + extra
 	}
 	if suffix != "" {
 		subject += "." + suffix
 	}
-	return micro.WithEndpointSubject(subject)
+	return subject
 }
