@@ -1,0 +1,80 @@
+package go_nats
+
+import (
+	"github.com/nats-io/nats.go/micro"
+	"time"
+)
+
+// Those handler interfaces can be implemented by the respective NATS server impl,
+//as an alternative to setting a handler via an option when creating the server.
+
+// StatsHandler is an interface that when implemented on the server, will
+// be used directly instead of having to use the WithStatsHandler option.
+type StatsHandler interface {
+	Stats(endpoint *micro.Endpoint) any
+}
+
+// DoneHandler is an interface that when implemented on the server, will
+// be used directly instead of having to use the WithDoneHandler option.
+type DoneHandler interface {
+	Done(service micro.Service)
+}
+
+// ErrHandler is an interface that when implemented on the server, will
+// be used directly instead of having to use the WithErrorHandler option.
+type ErrHandler interface {
+	Err(service micro.Service, natsErr *micro.NATSError)
+}
+
+type Ping struct {
+	micro.ServiceIdentity
+	Type string
+	RTT  time.Duration
+}
+
+type ServerOptions interface {
+	SetStatsHandler(micro.StatsHandler)
+	SetDoneHandler(micro.DoneHandler)
+	SetErrorHandler(micro.ErrHandler)
+	SetServiceVersion(string)
+	WithoutLeaderFns()
+	WithoutFollowerFns()
+}
+
+type ServerOption func(options ServerOptions)
+
+func WithStatsHandler(handler micro.StatsHandler) ServerOption {
+	return func(options ServerOptions) {
+		options.SetStatsHandler(handler)
+	}
+}
+
+func WithDoneHandler(handler micro.DoneHandler) ServerOption {
+	return func(options ServerOptions) {
+		options.SetDoneHandler(handler)
+	}
+}
+
+func WithErrorHandler(handler micro.ErrHandler) ServerOption {
+	return func(options ServerOptions) {
+		options.SetErrorHandler(handler)
+	}
+}
+
+func WithServiceVersion(version string) ServerOption {
+	return func(options ServerOptions) {
+		options.SetServiceVersion(version)
+	}
+}
+
+func WithoutLeaderFns() ServerOption {
+	return func(options ServerOptions) {
+		options.WithoutLeaderFns()
+	}
+}
+
+func WithoutFollowerFns() ServerOption {
+	return func(options ServerOptions) {
+		options.WithoutFollowerFns()
+	}
+}
