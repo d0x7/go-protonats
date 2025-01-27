@@ -4,8 +4,51 @@ import (
 	"regexp"
 	"slices"
 	"testing"
-	go_nats "xiam.li/go-nats"
+	"time"
+	"xiam.li/go-nats"
 )
+
+func TestInfo(t *testing.T) {
+	t.Parallel()
+	instance := newNATS(t)
+	t.Cleanup(instance.Stop)
+	var ids []string
+	for range 10 {
+		id := NewTestServiceNATSServer(instance.Conn, &testImplementation{}, go_nats.WithoutLeaderFns(), go_nats.WithoutFollowerFns()).Info().ID
+		ids = append(ids, id)
+	}
+	cli := NewTestServiceNATSClient(instance.Conn)
+
+	t.Run("WithFinisher", func(t *testing.T) {
+		now := time.Now()
+		info, err := cli.Info()
+		dur := time.Since(now)
+		if err != nil {
+			t.Fatalf("Error calling method: %v", err)
+		}
+		if dur > 300*time.Millisecond {
+			t.Fatalf("Info did not return within 500ms (%v)", dur)
+		}
+		if len(info) != 10 {
+			t.Fatalf("Expected 10 responses, got %d", len(info))
+		}
+	})
+
+	t.Run("WithoutFinisher", func(t *testing.T) {
+		now := time.Now()
+		info, err := cli.Info(go_nats.WithoutFinisher())
+		dur := time.Since(now)
+		if err != nil {
+			t.Fatalf("Error calling method: %v", err)
+		}
+		if dur <= 5000*time.Millisecond {
+			t.Fatalf("Info returned under 4.5s (%v)", dur)
+		}
+		if len(info) != 10 {
+			t.Fatalf("Expected 10 responses, got %d", len(info))
+		}
+	})
+}
 
 func TestNormal(t *testing.T) {
 	t.Parallel()

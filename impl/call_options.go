@@ -7,11 +7,16 @@ import (
 )
 
 type CallOpts struct {
-	InstanceID   string
-	Timeout      time.Duration
-	Retries      int
-	RetryDelay   time.Duration
-	RetryContext context.Context
+	InstanceID      string
+	Timeout         time.Duration
+	Retries         int
+	RetryDelay      time.Duration
+	RetryContext    context.Context
+	DisableFinisher bool
+}
+
+func (opts *CallOpts) WithoutFinisher() {
+	opts.DisableFinisher = true
 }
 
 func ProcessCallOptions(opts ...go_nats.CallOption) *CallOpts {

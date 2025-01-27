@@ -491,18 +491,15 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P()
 
 	// Generate request function
-	g.P("func request[T any](conn *", natsConn, ", timeout ", timeDuration, ", subject string, data []byte, collector func([]byte, ", timeDuration, ") (*T, error)) ([]*T, []", goNatsPkg.Ident("ServiceError"), ", error) {")
+	g.P("func request[T any](conn *", natsConn, ", timeout ", timeDuration, ", disableFinisher bool, subject string, data []byte, collector func([]byte, ", timeDuration, ") (*T, error)) ([]*T, []", goNatsPkg.Ident("ServiceError"), ", error) {")
 	g.P("ctx, cancel := ", protogen.GoImportPath("context").Ident("WithTimeout"), "(", protogen.GoImportPath("context").Ident("Background"), "(), timeout)")
 	g.P("defer cancel()")
 	g.P()
 	g.P("timer := ", timePkg.Ident("NewTimer"), "(timeout)")
 	g.P("go func() {")
-	g.P("// Select whatever happens first")
 	g.P("select {")
-	g.P("// if timer runs out first, cancel the 5 second context")
 	g.P("case <-timer.C:")
 	g.P("cancel()")
-	g.P("// if context is done already, do nothing, maybe stop timer")
 	g.P("case <-ctx.Done():")
 	g.P("timer.Stop()")
 	g.P("return")
@@ -513,6 +510,18 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("mu := ", protogen.GoImportPath("sync").Ident("Mutex"), "{}")
 	g.P("errCh := make(chan error)")
 	g.P("serviceErrs := []", goNatsPkg.Ident("ServiceError"), "{}")
+	g.P("var finisher *", timePkg.Ident("Timer"))
+	g.P("if !disableFinisher {")
+	g.P("finisher = ", timePkg.Ident("NewTimer"), "(timeout)")
+	g.P("go func() {")
+	g.P("select {")
+	g.P("case <-finisher.C:")
+	g.P("cancel()")
+	g.P("case <-ctx.Done():")
+	g.P("return")
+	g.P("}")
+	g.P("}()")
+	g.P("}")
 	g.P("sub, err := conn.Subscribe(conn.NewRespInbox(), func(msg *", natsPkg.Ident("Msg"), ") {")
 	g.P("mu.Lock()")
 	g.P("defer mu.Unlock()")
@@ -521,6 +530,10 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 	g.P("if msg.Header.Get(\"Status\") == \"503\" {")
 	g.P("errCh <- ", natsPkg.Ident("ErrNoResponders"))
 	g.P("return")
+	g.P("}")
+	g.P()
+	g.P("if finisher != nil {")
+	g.P("finisher.Reset(250 * ", timePkg.Ident("Millisecond"), ")")
 	g.P("}")
 	g.P()
 	g.P("if errMsg, errCode := msg.Header.Get(", microPkg.Ident("ErrorHeader"), "), msg.Header.Get(", microPkg.Ident("ErrorCodeHeader"), "); len(errMsg) > 0 && len(errCode) > 0 {")
@@ -633,7 +646,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 			}
 
 			if method.Output.Location.SourceFile != emptyPb {
-				g.P("objs, serviceErrs, err := request(c.nc, timeout, ", strconv.Quote(subjectName(service, method)), ",", input, ", func(data []byte, rtt ", timeDuration, ") (*", method.Output.GoIdent, ", error) {")
+				g.P("objs, serviceErrs, err := request(c.nc, timeout, options.DisableFinisher, ", strconv.Quote(subjectName(service, method)), ",", input, ", func(data []byte, rtt ", timeDuration, ") (*", method.Output.GoIdent, ", error) {")
 				g.P("var obj ", method.Output.GoIdent)
 				g.P("if err := ", protoUnmarshal, "(data, &obj); err != nil {")
 				g.P("return nil, err")
@@ -642,7 +655,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 				g.P("})")
 				g.P("return objs, serviceErrs, err")
 			} else {
-				g.P("_, serviceErrs, err := request[struct{}](c.nc, timeout, ", strconv.Quote(subjectName(service, method)), ", ", input, ", nil)")
+				g.P("_, serviceErrs, err := request[struct{}](c.nc, timeout, options.DisableFinisher, ", strconv.Quote(subjectName(service, method)), ", ", input, ", nil)")
 				g.P("return serviceErrs, err")
 			}
 		} else {
@@ -676,7 +689,7 @@ func generateReqFunc(g *protogen.GeneratedFile, cliName, goName, method string, 
 	g.P("subject = ", protogen.GoImportPath("fmt").Ident("Sprintf"), "(\"%s.%s.%s\", ", microPkg.Ident("APIPrefix"), ", ", verb, ", ", strconv.Quote(goName), ")")
 	g.P("}")
 
-	g.P("objs, _, err := request(c.nc, timeout, subject, nil, func(data []byte, rtt ", timeDuration, ") (*", T, ", error) {")
+	g.P("objs, _, err := request(c.nc, timeout, options.DisableFinisher, subject, nil, func(data []byte, rtt ", timeDuration, ") (*", T, ", error) {")
 	g.P("var obj ", T)
 	g.P("if err := ", protogen.GoImportPath("encoding/json").Ident("Unmarshal"), "(data, &obj); err != nil {")
 	g.P("return nil, err")

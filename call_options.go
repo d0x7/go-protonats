@@ -10,6 +10,7 @@ type CallOptions interface {
 	SetInstanceID(string)
 	SetTimeout(time.Duration)
 	SetRetry(int, time.Duration, time.Duration, context.Context)
+	WithoutFinisher()
 }
 
 type CallOption func(options CallOptions)
@@ -33,5 +34,13 @@ func WithTimeout(timeout time.Duration) CallOption {
 func WithRetry(ctx context.Context, minWait, maxWait time.Duration, maxTries int) CallOption {
 	return func(opts CallOptions) {
 		opts.SetRetry(maxTries, minWait, maxWait, ctx)
+	}
+}
+
+// WithoutFinisher disables the use of a finisher, which would return early
+// after the first response when no further response is received after 250 ms
+func WithoutFinisher() CallOption {
+	return func(options CallOptions) {
+		options.WithoutFinisher()
 	}
 }
