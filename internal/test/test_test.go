@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"testing"
@@ -543,4 +544,49 @@ func TestFollowerOnlyBroadcast(t *testing.T) {
 			t.Fatalf("Unexpected server errors: %v", srvErrs)
 		}
 	})
+}
+
+func TestExtraSubject(t *testing.T) {
+	t.Parallel()
+	instance := newNATS(t)
+	t.Cleanup(instance.Stop)
+	var ids []string
+	for i := range 3 {
+		id := fmt.Sprintf("instance%02d", i)
+		impl := new(testImplementation)
+		_ = NewTestServiceNATSServer(instance.Conn, impl, go_nats.WithExtraSubjectSrv(id))
+		ids = append(ids, impl.id)
+		impl.id = impl.id + " aka " + id
+	}
+	cli := NewTestServiceNATSClient(instance.Conn)
+
+	for i := range 3 {
+		id := fmt.Sprintf("instance%02d", i)
+		t.Run("EmptyTest/"+id, func(t *testing.T) {
+			t.Parallel()
+			resp, srvErrs, err := cli.NormalBroadcastEmptyTest(go_nats.WithExtraSubject(id))
+			if err != nil {
+				t.Fatalf("Error calling method: %v", err)
+			}
+			if len(srvErrs) != 0 {
+				t.Fatalf("Unexpected server errors: %v", srvErrs)
+			}
+			if len(resp) != 1 {
+				t.Fatalf("Expected one response, got %d: %v", len(resp), resp)
+			}
+			for _, r := range resp {
+				re := regexp.MustCompile(`^server replying to empty from ([a-zA-Z0-9]+) aka ([a-zA-Z0-9]+)$`)
+				matches := re.FindStringSubmatch(r.Test)
+				if len(matches) != 3 {
+					t.Fatalf("Response format doesn't match: %v", r.Test)
+				}
+				if !slices.Contains(ids, matches[1]) {
+					t.Fatalf("Server ID not found in the list of follower IDs: %v", matches[1])
+				}
+				if matches[2] != id {
+					t.Fatalf("Extra subject doesn't match: %v", matches[2])
+				}
+			}
+		})
+	}
 }
