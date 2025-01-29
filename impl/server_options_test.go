@@ -33,7 +33,7 @@ func TestServerOpts_WithoutLeaderFns(t *testing.T) {
 
 func TestServerOpts_WithExtraSubject(t *testing.T) {
 	opts := new(ServerOpts)
-	go_nats.WithExtraSubject("test")(opts)
+	go_nats.WithExtraSubjectSrv("test")(opts)
 	if opts.ExtraSubject != "test" {
 		t.Error("ExtraSubject not set correctly")
 	}

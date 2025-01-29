@@ -5,12 +5,13 @@ import (
 	"time"
 )
 
-// CallOptions to  be used when calling a method.
+// CallOptions to be used when calling a method.
 type CallOptions interface {
 	SetInstanceID(string)
 	SetTimeout(time.Duration)
 	SetRetry(int, time.Duration, time.Duration, context.Context)
 	WithoutFinisher()
+	SetExtraSubject(subject string)
 }
 
 type CallOption func(options CallOptions)
@@ -42,5 +43,13 @@ func WithRetry(ctx context.Context, minWait, maxWait time.Duration, maxTries int
 func WithoutFinisher() CallOption {
 	return func(options CallOptions) {
 		options.WithoutFinisher()
+	}
+}
+
+// WithExtraSubject sets an extra subject for the subjects used by the microservice.
+// Primarily used for consensus algorithms to distinguish between different services, while using the same implementation.
+func WithExtraSubject(extraSubject string) CallOption {
+	return func(options CallOptions) {
+		options.SetExtraSubject(extraSubject)
 	}
 }
