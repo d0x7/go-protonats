@@ -78,7 +78,7 @@ var file_test_proto_rawDesc = []byte{
 	0x79, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x0d, 0x67, 0x6f, 0x5f, 0x6e, 0x61, 0x74, 0x73,
 	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x1a, 0x0a, 0x04, 0x54, 0x65, 0x73, 0x74, 0x12, 0x12,
 	0x0a, 0x04, 0x74, 0x65, 0x73, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x74, 0x65,
-	0x73, 0x74, 0x32, 0x8d, 0x11, 0x0a, 0x0b, 0x54, 0x65, 0x73, 0x74, 0x53, 0x65, 0x72, 0x76, 0x69,
+	0x73, 0x74, 0x32, 0xd3, 0x11, 0x0a, 0x0b, 0x54, 0x65, 0x73, 0x74, 0x53, 0x65, 0x72, 0x76, 0x69,
 	0x63, 0x65, 0x12, 0x38, 0x0a, 0x0e, 0x4e, 0x6f, 0x72, 0x6d, 0x61, 0x6c, 0x54, 0x65, 0x73, 0x74,
 	0x54, 0x65, 0x73, 0x74, 0x12, 0x12, 0x2e, 0x67, 0x6f, 0x5f, 0x6e, 0x61, 0x74, 0x73, 0x2e, 0x74,
 	0x65, 0x73, 0x74, 0x2e, 0x54, 0x65, 0x73, 0x74, 0x1a, 0x12, 0x2e, 0x67, 0x6f, 0x5f, 0x6e, 0x61,
@@ -215,9 +215,14 @@ var file_test_proto_rawDesc = []byte{
 	0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x16, 0x2e, 0x67,
 	0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45,
 	0x6d, 0x70, 0x74, 0x79, 0x22, 0x0c, 0xd0, 0xe4, 0xa0, 0xd9, 0x0f, 0x01, 0xd8, 0xe4, 0xa0, 0xd9,
-	0x0f, 0x00, 0x42, 0x1f, 0x5a, 0x1d, 0x78, 0x69, 0x61, 0x6d, 0x2e, 0x6c, 0x69, 0x2f, 0x67, 0x6f,
-	0x2d, 0x6e, 0x61, 0x74, 0x73, 0x2f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x2f, 0x74,
-	0x65, 0x73, 0x74, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x0f, 0x00, 0x12, 0x44, 0x0a, 0x10, 0x54, 0x68, 0x72, 0x65, 0x65, 0x53, 0x65, 0x63, 0x6f, 0x6e,
+	0x64, 0x44, 0x65, 0x6c, 0x61, 0x79, 0x12, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x1a, 0x16,
+	0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66,
+	0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x22, 0x00, 0x42, 0x1f, 0x5a, 0x1d, 0x78, 0x69, 0x61, 0x6d,
+	0x2e, 0x6c, 0x69, 0x2f, 0x67, 0x6f, 0x2d, 0x6e, 0x61, 0x74, 0x73, 0x2f, 0x69, 0x6e, 0x74, 0x65,
+	0x72, 0x6e, 0x61, 0x6c, 0x2f, 0x74, 0x65, 0x73, 0x74, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x33,
 }
 
 var (
@@ -266,36 +271,38 @@ var file_test_proto_depIdxs = []int32{
 	1,  // 25: go_nats.test.TestService.FollowerOnlyBroadcastEmptyTest:input_type -> google.protobuf.Empty
 	0,  // 26: go_nats.test.TestService.FollowerOnlyBroadcastTestEmpty:input_type -> go_nats.test.Test
 	1,  // 27: go_nats.test.TestService.FollowerOnlyBroadcastEmptyEmpty:input_type -> google.protobuf.Empty
-	0,  // 28: go_nats.test.TestService.NormalTestTest:output_type -> go_nats.test.Test
-	0,  // 29: go_nats.test.TestService.NormalEmptyTest:output_type -> go_nats.test.Test
-	1,  // 30: go_nats.test.TestService.NormalTestEmpty:output_type -> google.protobuf.Empty
-	1,  // 31: go_nats.test.TestService.NormalEmptyEmpty:output_type -> google.protobuf.Empty
-	0,  // 32: go_nats.test.TestService.ErrServiceError:output_type -> go_nats.test.Test
-	0,  // 33: go_nats.test.TestService.ErrServerError:output_type -> go_nats.test.Test
-	0,  // 34: go_nats.test.TestService.ErrServiceErrorBroadcast:output_type -> go_nats.test.Test
-	0,  // 35: go_nats.test.TestService.ErrServerErrorBroadcast:output_type -> go_nats.test.Test
-	0,  // 36: go_nats.test.TestService.NormalBroadcastTestTest:output_type -> go_nats.test.Test
-	0,  // 37: go_nats.test.TestService.NormalBroadcastEmptyTest:output_type -> go_nats.test.Test
-	1,  // 38: go_nats.test.TestService.NormalBroadcastTestEmpty:output_type -> google.protobuf.Empty
-	1,  // 39: go_nats.test.TestService.NormalBroadcastEmptyEmpty:output_type -> google.protobuf.Empty
-	0,  // 40: go_nats.test.TestService.LeaderOnlyTestTest:output_type -> go_nats.test.Test
-	0,  // 41: go_nats.test.TestService.LeaderOnlyEmptyTest:output_type -> go_nats.test.Test
-	1,  // 42: go_nats.test.TestService.LeaderOnlyTestEmpty:output_type -> google.protobuf.Empty
-	1,  // 43: go_nats.test.TestService.LeaderOnlyEmptyEmpty:output_type -> google.protobuf.Empty
-	0,  // 44: go_nats.test.TestService.LeaderOnlyBroadcastTestTest:output_type -> go_nats.test.Test
-	0,  // 45: go_nats.test.TestService.LeaderOnlyBroadcastEmptyTest:output_type -> go_nats.test.Test
-	1,  // 46: go_nats.test.TestService.LeaderOnlyBroadcastTestEmpty:output_type -> google.protobuf.Empty
-	1,  // 47: go_nats.test.TestService.LeaderOnlyBroadcastEmptyEmpty:output_type -> google.protobuf.Empty
-	0,  // 48: go_nats.test.TestService.FollowerOnlyTestTest:output_type -> go_nats.test.Test
-	0,  // 49: go_nats.test.TestService.FollowerOnlyEmptyTest:output_type -> go_nats.test.Test
-	1,  // 50: go_nats.test.TestService.FollowerOnlyTestEmpty:output_type -> google.protobuf.Empty
-	1,  // 51: go_nats.test.TestService.FollowerOnlyEmptyEmpty:output_type -> google.protobuf.Empty
-	0,  // 52: go_nats.test.TestService.FollowerOnlyBroadcastTestTest:output_type -> go_nats.test.Test
-	0,  // 53: go_nats.test.TestService.FollowerOnlyBroadcastEmptyTest:output_type -> go_nats.test.Test
-	1,  // 54: go_nats.test.TestService.FollowerOnlyBroadcastTestEmpty:output_type -> google.protobuf.Empty
-	1,  // 55: go_nats.test.TestService.FollowerOnlyBroadcastEmptyEmpty:output_type -> google.protobuf.Empty
-	28, // [28:56] is the sub-list for method output_type
-	0,  // [0:28] is the sub-list for method input_type
+	1,  // 28: go_nats.test.TestService.ThreeSecondDelay:input_type -> google.protobuf.Empty
+	0,  // 29: go_nats.test.TestService.NormalTestTest:output_type -> go_nats.test.Test
+	0,  // 30: go_nats.test.TestService.NormalEmptyTest:output_type -> go_nats.test.Test
+	1,  // 31: go_nats.test.TestService.NormalTestEmpty:output_type -> google.protobuf.Empty
+	1,  // 32: go_nats.test.TestService.NormalEmptyEmpty:output_type -> google.protobuf.Empty
+	0,  // 33: go_nats.test.TestService.ErrServiceError:output_type -> go_nats.test.Test
+	0,  // 34: go_nats.test.TestService.ErrServerError:output_type -> go_nats.test.Test
+	0,  // 35: go_nats.test.TestService.ErrServiceErrorBroadcast:output_type -> go_nats.test.Test
+	0,  // 36: go_nats.test.TestService.ErrServerErrorBroadcast:output_type -> go_nats.test.Test
+	0,  // 37: go_nats.test.TestService.NormalBroadcastTestTest:output_type -> go_nats.test.Test
+	0,  // 38: go_nats.test.TestService.NormalBroadcastEmptyTest:output_type -> go_nats.test.Test
+	1,  // 39: go_nats.test.TestService.NormalBroadcastTestEmpty:output_type -> google.protobuf.Empty
+	1,  // 40: go_nats.test.TestService.NormalBroadcastEmptyEmpty:output_type -> google.protobuf.Empty
+	0,  // 41: go_nats.test.TestService.LeaderOnlyTestTest:output_type -> go_nats.test.Test
+	0,  // 42: go_nats.test.TestService.LeaderOnlyEmptyTest:output_type -> go_nats.test.Test
+	1,  // 43: go_nats.test.TestService.LeaderOnlyTestEmpty:output_type -> google.protobuf.Empty
+	1,  // 44: go_nats.test.TestService.LeaderOnlyEmptyEmpty:output_type -> google.protobuf.Empty
+	0,  // 45: go_nats.test.TestService.LeaderOnlyBroadcastTestTest:output_type -> go_nats.test.Test
+	0,  // 46: go_nats.test.TestService.LeaderOnlyBroadcastEmptyTest:output_type -> go_nats.test.Test
+	1,  // 47: go_nats.test.TestService.LeaderOnlyBroadcastTestEmpty:output_type -> google.protobuf.Empty
+	1,  // 48: go_nats.test.TestService.LeaderOnlyBroadcastEmptyEmpty:output_type -> google.protobuf.Empty
+	0,  // 49: go_nats.test.TestService.FollowerOnlyTestTest:output_type -> go_nats.test.Test
+	0,  // 50: go_nats.test.TestService.FollowerOnlyEmptyTest:output_type -> go_nats.test.Test
+	1,  // 51: go_nats.test.TestService.FollowerOnlyTestEmpty:output_type -> google.protobuf.Empty
+	1,  // 52: go_nats.test.TestService.FollowerOnlyEmptyEmpty:output_type -> google.protobuf.Empty
+	0,  // 53: go_nats.test.TestService.FollowerOnlyBroadcastTestTest:output_type -> go_nats.test.Test
+	0,  // 54: go_nats.test.TestService.FollowerOnlyBroadcastEmptyTest:output_type -> go_nats.test.Test
+	1,  // 55: go_nats.test.TestService.FollowerOnlyBroadcastTestEmpty:output_type -> google.protobuf.Empty
+	1,  // 56: go_nats.test.TestService.FollowerOnlyBroadcastEmptyEmpty:output_type -> google.protobuf.Empty
+	1,  // 57: go_nats.test.TestService.ThreeSecondDelay:output_type -> google.protobuf.Empty
+	29, // [29:58] is the sub-list for method output_type
+	0,  // [0:29] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name

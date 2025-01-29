@@ -101,6 +101,9 @@ service TestService {
     option (go_nats.consensus_target) = FOLLOWER;
     option (go_nats.broadcast) = true;
   }
+
+  // Special cases
+  rpc ThreeSecondDelay(google.protobuf.Empty) returns (google.protobuf.Empty) {}
 }
 
 message Test {

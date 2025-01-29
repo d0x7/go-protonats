@@ -2,6 +2,7 @@ package test
 
 import (
 	"fmt"
+	"time"
 	"xiam.li/go-nats"
 )
 
@@ -124,3 +125,11 @@ func (t *testImplementation) FollowerOnlyBroadcastTestEmpty(*Test) error {
 func (t *testImplementation) FollowerOnlyBroadcastEmptyEmpty() error {
 	return nil
 }
+
+func (t *testImplementation) ThreeSecondDelay() error {
+	time.Sleep(3 * time.Second)
+	return nil
+}
+
+// Interface guard
+var _ TestServiceNATSServer = (*testImplementation)(nil)

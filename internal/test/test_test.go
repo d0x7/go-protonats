@@ -1,7 +1,9 @@
 package test
 
 import (
+	"errors"
 	"fmt"
+	nats_go "github.com/nats-io/nats.go"
 	"regexp"
 	"slices"
 	"testing"
@@ -15,7 +17,7 @@ func TestInfo(t *testing.T) {
 	t.Cleanup(instance.Stop)
 	var ids []string
 	for range 10 {
-		id := NewTestServiceNATSServer(instance.Conn, &testImplementation{}, go_nats.WithoutLeaderFns(), go_nats.WithoutFollowerFns()).Info().ID
+		id := NewTestServiceNATSServer(instance.Conn, new(testImplementation), go_nats.WithoutLeaderFns(), go_nats.WithoutFollowerFns()).Info().ID
 		ids = append(ids, id)
 	}
 	cli := NewTestServiceNATSClient(instance.Conn)
@@ -57,7 +59,7 @@ func TestNormal(t *testing.T) {
 	t.Cleanup(instance.Stop)
 	var ids []string
 	for range 3 {
-		id := NewTestServiceNATSServer(instance.Conn, &testImplementation{}, go_nats.WithoutLeaderFns(), go_nats.WithoutFollowerFns()).Info().ID
+		id := NewTestServiceNATSServer(instance.Conn, new(testImplementation), go_nats.WithoutLeaderFns(), go_nats.WithoutFollowerFns()).Info().ID
 		ids = append(ids, id)
 	}
 	cli := NewTestServiceNATSClient(instance.Conn)
@@ -117,7 +119,7 @@ func TestNormalBroadcast(t *testing.T) {
 	t.Cleanup(instance.Stop)
 	var ids []string
 	for range 3 {
-		id := NewTestServiceNATSServer(instance.Conn, &testImplementation{}, go_nats.WithoutLeaderFns(), go_nats.WithoutFollowerFns()).Info().ID
+		id := NewTestServiceNATSServer(instance.Conn, new(testImplementation), go_nats.WithoutLeaderFns(), go_nats.WithoutFollowerFns()).Info().ID
 		ids = append(ids, id)
 	}
 	cli := NewTestServiceNATSClient(instance.Conn)
@@ -197,7 +199,7 @@ func TestErr(t *testing.T) {
 	t.Parallel()
 	instance := newNATS(t)
 	t.Cleanup(instance.Stop)
-	NewTestServiceNATSServer(instance.Conn, &testImplementation{}, go_nats.WithoutLeaderFns(), go_nats.WithoutFollowerFns())
+	NewTestServiceNATSServer(instance.Conn, new(testImplementation), go_nats.WithoutLeaderFns(), go_nats.WithoutFollowerFns())
 	cli := NewTestServiceNATSClient(instance.Conn)
 
 	t.Run("ServiceError", func(t *testing.T) {
@@ -235,7 +237,7 @@ func TestErrBroadcast(t *testing.T) {
 	t.Cleanup(instance.Stop)
 	var ids []string
 	for range 3 {
-		id := NewTestServiceNATSServer(instance.Conn, &testImplementation{}).Info().ID
+		id := NewTestServiceNATSServer(instance.Conn, new(testImplementation)).Info().ID
 		ids = append(ids, id)
 	}
 	cli := NewTestServiceNATSClient(instance.Conn)
@@ -284,9 +286,9 @@ func TestLeaderOnly(t *testing.T) {
 	instance := newNATS(t)
 	t.Cleanup(instance.Stop)
 	for range 3 {
-		NewTestServiceNATSFollowerServer(instance.Conn, &testImplementation{})
+		NewTestServiceNATSFollowerServer(instance.Conn, new(testImplementation))
 	}
-	leaderImpl := &testImplementation{}
+	leaderImpl := new(testImplementation)
 	NewTestServiceNATSLeaderServer(instance.Conn, leaderImpl)
 	if leaderImpl.id == "" {
 		t.Fatalf("Server id is empty")
@@ -338,9 +340,9 @@ func TestLeaderOnlyBroadcast(t *testing.T) {
 	instance := newNATS(t)
 	t.Cleanup(instance.Stop)
 	for range 3 {
-		NewTestServiceNATSFollowerServer(instance.Conn, &testImplementation{})
+		NewTestServiceNATSFollowerServer(instance.Conn, new(testImplementation))
 	}
-	id := NewTestServiceNATSLeaderServer(instance.Conn, &testImplementation{}).Info().ID
+	id := NewTestServiceNATSLeaderServer(instance.Conn, new(testImplementation)).Info().ID
 	cli := NewTestServiceNATSClient(instance.Conn)
 
 	t.Run("TestTest", func(t *testing.T) {
@@ -406,10 +408,10 @@ func TestFollowerOnly(t *testing.T) {
 	t.Cleanup(instance.Stop)
 	var ids []string
 	for range 3 {
-		id := NewTestServiceNATSFollowerServer(instance.Conn, &testImplementation{}).Info().ID
+		id := NewTestServiceNATSFollowerServer(instance.Conn, new(testImplementation)).Info().ID
 		ids = append(ids, id)
 	}
-	NewTestServiceNATSLeaderServer(instance.Conn, &testImplementation{})
+	NewTestServiceNATSLeaderServer(instance.Conn, new(testImplementation))
 
 	cli := NewTestServiceNATSClient(instance.Conn)
 
@@ -468,10 +470,10 @@ func TestFollowerOnlyBroadcast(t *testing.T) {
 	t.Cleanup(instance.Stop)
 	var ids []string
 	for range 3 {
-		id := NewTestServiceNATSFollowerServer(instance.Conn, &testImplementation{}).Info().ID
+		id := NewTestServiceNATSFollowerServer(instance.Conn, new(testImplementation)).Info().ID
 		ids = append(ids, id)
 	}
-	NewTestServiceNATSLeaderServer(instance.Conn, &testImplementation{})
+	NewTestServiceNATSLeaderServer(instance.Conn, new(testImplementation))
 
 	cli := NewTestServiceNATSClient(instance.Conn)
 
@@ -589,4 +591,23 @@ func TestExtraSubject(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestContext(t *testing.T) {
+	t.Parallel()
+	instance := newNATS(t)
+	t.Cleanup(instance.Stop)
+	_ = NewTestServiceNATSServer(instance.Conn, new(testImplementation))
+	cli := NewTestServiceNATSClient(instance.Conn)
+
+	t.Run("WithTimeout", func(t *testing.T) {
+		t.Parallel()
+		err := cli.ThreeSecondDelay(go_nats.WithTimeout(1 * time.Second))
+		if err == nil {
+			t.Fatalf("Expected error, got nil")
+		}
+		if !errors.Is(err, nats_go.ErrTimeout) {
+			t.Fatalf("Expected timeout error, got: %v", err)
+		}
+	})
 }
