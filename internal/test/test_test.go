@@ -1,6 +1,7 @@
 package test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	nats_go "github.com/nats-io/nats.go"
@@ -608,6 +609,36 @@ func TestContext(t *testing.T) {
 		}
 		if !errors.Is(err, nats_go.ErrTimeout) {
 			t.Fatalf("Expected timeout error, got: %v", err)
+		}
+	})
+
+	t.Run("ContextCancel", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		go func() {
+			time.Sleep(1 * time.Second)
+			cancel()
+		}()
+		err := cli.ThreeSecondDelay(go_nats.WithContext(ctx))
+		if err == nil {
+			t.Fatalf("Expected error, got nil")
+		}
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Expected context cancelled error, got: %v", err)
+		}
+	})
+
+	t.Run("ContextDeadline", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+		err := cli.ThreeSecondDelay(go_nats.WithContext(ctx))
+		if err == nil {
+			t.Fatalf("Expected error, got nil")
+		}
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Expected deadline exceeded error, got: %v", err)
 		}
 	})
 }
