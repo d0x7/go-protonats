@@ -79,3 +79,6 @@ func _subject(subject, extra, suffix string) string {
 	}
 	return subject
 }
+
+// Interface guard
+var _ go_nats.ServerOptions = (*ServerOpts)(nil)

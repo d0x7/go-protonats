@@ -13,6 +13,7 @@ type CallOpts struct {
 	RetryDelay      time.Duration
 	RetryContext    context.Context
 	DisableFinisher bool
+	ExtraSubject    string
 }
 
 func (opts *CallOpts) WithoutFinisher() {
@@ -75,3 +76,14 @@ func (opts *CallOpts) GetTimeoutOr(duration time.Duration) time.Duration {
 func (opts *CallOpts) ShouldRetry() bool {
 	return opts.Retries > 0 && opts.RetryContext != nil
 }
+
+func (opts *CallOpts) SetExtraSubject(subject string) {
+	opts.ExtraSubject = subject
+}
+
+func (opts *CallOpts) Subject(subject string) string {
+	return _subject(subject, opts.ExtraSubject, opts.InstanceID)
+}
+
+// Interface guard
+var _ go_nats.CallOptions = (*CallOpts)(nil)

@@ -60,6 +60,14 @@ func TestCallOpts_WithRetry(t *testing.T) {
 	})
 }
 
+func TestCallOpts_WithExtraSubject(t *testing.T) {
+	opts := new(CallOpts)
+	go_nats.WithExtraSubject("test")(opts)
+	if opts.ExtraSubject != "test" {
+		t.Error("ExtraSubject not set correctly")
+	}
+}
+
 func TestProcessCallOptions(t *testing.T) {
 	opts := ProcessCallOptions(
 		go_nats.WithInstanceID("test"),

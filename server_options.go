@@ -93,9 +93,9 @@ func WithoutFollowerFns() ServerOption {
 	}
 }
 
-// WithExtraSubject sets an extra subject for the subjects used by the microservice.
+// WithExtraSubjectSrv sets an extra subject for the subjects used by the microservice.
 // Primarily used for consensus algorithms to distinguish between different services, while using the same implementation.
-func WithExtraSubject(extraSubject string) ServerOption {
+func WithExtraSubjectSrv(extraSubject string) ServerOption {
 	return func(options ServerOptions) {
 		options.SetExtraSubject(extraSubject)
 	}
