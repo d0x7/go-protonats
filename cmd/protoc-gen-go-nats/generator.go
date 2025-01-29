@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
@@ -54,9 +55,9 @@ func protocVersion(gen *protogen.Plugin) string {
 
 func unexport(s string) string { return strings.ToLower(s[:1]) + s[1:] }
 
-func generateFile(gen *protogen.Plugin, file *protogen.File) {
+func generateFile(gen *protogen.Plugin, file *protogen.File) error {
 	if len(file.Services) == 0 {
-		return
+		return nil
 	}
 	filename := file.GeneratedFilenamePrefix + "_nats.pb.go"
 	g := gen.NewGeneratedFile(filename, file.GoImportPath)
@@ -73,8 +74,11 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 	g.P("package ", file.GoPackageName)
 	g.P()
 	for _, service := range file.Services {
-		generateService(g, service)
+		if err := generateService(g, service); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func isUsingBroadcasting(method *protogen.Method) bool {
@@ -93,7 +97,7 @@ func getConsensusTarget(method *protogen.Method) *gonats_proto.ConsensusTarget {
 	return &extension
 }
 
-func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
+func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error {
 	srvName := service.GoName + "NATSServer"
 
 	var leaderMethods, followerMethods []string
@@ -204,10 +208,6 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 			// TODO: Skipping currently unsupported streaming methods for now
 			continue
 		}
-		// Check if method.GoName is in reservedKeywords
-		if _, ok := reservedKeywords[strings.ToLower(method.GoName)]; ok {
-			continue
-		}
 		if getConsensusTarget(method) != nil {
 			continue
 		}
@@ -239,10 +239,6 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 		for _, method := range service.Methods {
 			if method.Desc.IsStreamingClient() || method.Desc.IsStreamingServer() {
 				// TODO: Skipping currently unsupported streaming methods for now
-				continue
-			}
-			// Check if method.GoName is in reservedKeywords
-			if _, ok := reservedKeywords[strings.ToLower(method.GoName)]; ok {
 				continue
 			}
 			if target := getConsensusTarget(method); target == nil || *target != gonats_proto.ConsensusTarget_LEADER {
@@ -278,10 +274,6 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 				// TODO: Skipping currently unsupported streaming methods for now
 				continue
 			}
-			// Check if method.GoName is in reservedKeywords
-			if _, ok := reservedKeywords[strings.ToLower(method.GoName)]; ok {
-				continue
-			}
 			if target := getConsensusTarget(method); target == nil || *target != gonats_proto.ConsensusTarget_FOLLOWER {
 				continue
 			}
@@ -291,6 +283,7 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) {
 		g.P()
 	}
 	g.P("//endregion")
+	return nil
 }
 
 func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method) {
@@ -356,7 +349,7 @@ func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Servic
 	g.P()
 }
 
-func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
+func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error {
 	cliName := service.GoName + "NATSClient"
 
 	// Generate client interface
@@ -371,8 +364,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 		}
 		// Check if method.GoName is in reservedKeywords
 		if _, ok := reservedKeywords[strings.ToLower(method.GoName)]; ok {
-			g.P("// ", method.GoName, " is a reserved keyword and cannot be used as a method name")
-			continue
+			return errors.New("reserved keyword '" + method.GoName + "' used as method name")
 		}
 		broadcasting := isUsingBroadcasting(method)
 		var req, resp string
@@ -584,10 +576,6 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 			// TODO: Skipping currently unsupported streaming methods for now
 			continue
 		}
-		// Check if method.GoName is in reservedKeywords
-		if _, ok := reservedKeywords[strings.ToLower(method.GoName)]; ok {
-			continue
-		}
 		broadcasting := isUsingBroadcasting(method)
 
 		var req, resp, handleReq, handleResp, returnResp string
@@ -674,6 +662,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) {
 
 	g.P("//endregion")
 	g.P()
+	return nil
 }
 
 func generateReqFunc(g *protogen.GeneratedFile, cliName, goName, method string, T any, verb any) {
@@ -704,9 +693,14 @@ func generateReqFunc(g *protogen.GeneratedFile, cliName, goName, method string, 
 	g.P()
 }
 
-func generateService(g *protogen.GeneratedFile, service *protogen.Service) {
-	generateClient(g, service)
-	generateServer(g, service)
+func generateService(g *protogen.GeneratedFile, service *protogen.Service) error {
+	if err := generateClient(g, service); err != nil {
+		return err
+	}
+	if err := generateServer(g, service); err != nil {
+		return err
+	}
+	return nil
 }
 
 func subjectName(service *protogen.Service, method *protogen.Method) string {

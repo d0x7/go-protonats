@@ -34,7 +34,9 @@ func main() {
 
 		for _, f := range gen.Files {
 			if f.Generate {
-				generateFile(gen, f)
+				if err := generateFile(gen, f); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
