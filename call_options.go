@@ -12,6 +12,7 @@ type CallOptions interface {
 	SetRetry(int, time.Duration, time.Duration, context.Context)
 	WithoutFinisher()
 	SetExtraSubject(subject string)
+	SetContext(ctx context.Context)
 }
 
 type CallOption func(options CallOptions)
@@ -51,5 +52,14 @@ func WithoutFinisher() CallOption {
 func WithExtraSubject(extraSubject string) CallOption {
 	return func(options CallOptions) {
 		options.SetExtraSubject(extraSubject)
+	}
+}
+
+// WithContext sets the context for the call.
+// Not necessary to use when WithRetry is used, as the context
+// passed is shared and can be overridden the function called last.
+func WithContext(ctx context.Context) CallOption {
+	return func(options CallOptions) {
+		options.SetContext(ctx)
 	}
 }

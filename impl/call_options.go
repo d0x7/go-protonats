@@ -11,7 +11,7 @@ type CallOpts struct {
 	Timeout         time.Duration
 	Retries         int
 	RetryDelay      time.Duration
-	RetryContext    context.Context
+	Context         context.Context
 	DisableFinisher bool
 	ExtraSubject    string
 }
@@ -54,7 +54,7 @@ func (opts *CallOpts) SetRetry(maxTries int, minWait time.Duration, maxWait time
 	timePerRetry := minWaitf + (extraTime / retries)
 
 	opts.Retries = maxTries
-	opts.RetryContext = ctx
+	opts.Context = ctx
 	opts.RetryDelay = time.Duration(timePerRetry) * time.Millisecond
 }
 
@@ -74,7 +74,7 @@ func (opts *CallOpts) GetTimeoutOr(duration time.Duration) time.Duration {
 }
 
 func (opts *CallOpts) ShouldRetry() bool {
-	return opts.Retries > 0 && opts.RetryContext != nil
+	return opts.Retries > 0 && opts.Context != nil
 }
 
 func (opts *CallOpts) SetExtraSubject(subject string) {
@@ -83,6 +83,17 @@ func (opts *CallOpts) SetExtraSubject(subject string) {
 
 func (opts *CallOpts) Subject(subject string) string {
 	return _subject(subject, opts.ExtraSubject, opts.InstanceID)
+}
+
+func (opts *CallOpts) SetContext(ctx context.Context) {
+	opts.Context = ctx
+}
+
+func (opts *CallOpts) Ctx() context.Context {
+	if opts.Context == nil {
+		return context.Background()
+	}
+	return opts.Context
 }
 
 // Interface guard

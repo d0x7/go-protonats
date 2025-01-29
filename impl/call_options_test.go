@@ -32,8 +32,8 @@ func TestCallOpts_WithRetry(t *testing.T) {
 	if opts.RetryDelay != 100*time.Millisecond {
 		t.Error("RetryDelay not set correctly", opts.RetryDelay)
 	}
-	if opts.RetryContext != context.Background() {
-		t.Error("RetryContext not set correctly")
+	if opts.Context != context.Background() {
+		t.Error("Context not set correctly")
 	}
 	t.Run("invalidMaxTries", func(t *testing.T) {
 		defer func() {
@@ -54,8 +54,8 @@ func TestCallOpts_WithRetry(t *testing.T) {
 		if opts.RetryDelay != 0 {
 			t.Error("RetryDelay should be 0")
 		}
-		if opts.RetryContext != nil {
-			t.Error("RetryContext should be nil")
+		if opts.Context != nil {
+			t.Error("Context should be nil")
 		}
 	})
 }
@@ -68,11 +68,19 @@ func TestCallOpts_WithExtraSubject(t *testing.T) {
 	}
 }
 
+func TestCallOpts_WithContext(t *testing.T) {
+	opts := new(CallOpts)
+	go_nats.WithContext(context.TODO())(opts)
+	if opts.Context != context.TODO() {
+		t.Error("Context not set correctly")
+	}
+}
+
 func TestProcessCallOptions(t *testing.T) {
 	opts := ProcessCallOptions(
 		go_nats.WithInstanceID("test"),
 		go_nats.WithTimeout(100*time.Millisecond),
-		go_nats.WithRetry(context.Background(), 100*time.Millisecond, 300*time.Millisecond, 3),
+		go_nats.WithRetry(context.TODO(), 100*time.Millisecond, 300*time.Millisecond, 3),
 	)
 	if opts.InstanceID != "test" {
 		t.Error("InstanceID not set correctly")
@@ -86,7 +94,7 @@ func TestProcessCallOptions(t *testing.T) {
 	if opts.RetryDelay != 100*time.Millisecond {
 		t.Error("RetryDelay not set correctly", opts.RetryDelay)
 	}
-	if opts.RetryContext != context.Background() {
-		t.Error("RetryContext not set correctly")
+	if opts.Context != context.TODO() {
+		t.Error("Context not set correctly")
 	}
 }
