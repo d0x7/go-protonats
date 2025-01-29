@@ -480,7 +480,10 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 	g.P()
 
 	// Generate request function
-	g.P("func request[T any](conn *", natsConn, ", timeout ", timeDuration, ", disableFinisher bool, subject string, data []byte, collector func([]byte, ", timeDuration, ") (*T, error)) ([]*T, []", goNatsPkg.Ident("ServiceError"), ", error) {")
+	g.P("func request[T any](conn *", natsConn, ", timeout ", timeDuration, ", subject string, data []byte, collector func([]byte, ", timeDuration, ") (*T, error), opts ...", goNatsPkg.Ident("CallOption"), ") ([]*T, []", goNatsPkg.Ident("ServiceError"), ", error) {")
+	g.P("options := ", goNatsImplPkg.Ident("ProcessCallOptions"), "(opts...)")
+	g.P("timeout = options.GetTimeoutOr(timeout)")
+	g.P()
 	g.P("ctx, cancel := ", protogen.GoImportPath("context").Ident("WithTimeout"), "(", protogen.GoImportPath("context").Ident("Background"), "(), timeout)")
 	g.P("defer cancel()")
 	g.P()
@@ -500,7 +503,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 	g.P("errCh := make(chan error)")
 	g.P("serviceErrs := []", goNatsPkg.Ident("ServiceError"), "{}")
 	g.P("var finisher *", timePkg.Ident("Timer"))
-	g.P("if !disableFinisher {")
+	g.P("if !options.DisableFinisher {")
 	g.P("finisher = ", timePkg.Ident("NewTimer"), "(timeout)")
 	g.P("go func() {")
 	g.P("select {")
@@ -547,7 +550,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 	g.P("defer sub.Unsubscribe()")
 	g.P()
 	g.P("start = ", timePkg.Ident("Now"), "()")
-	g.P("err = conn.PublishRequest(subject, sub.Subject, data)")
+	g.P("err = conn.PublishRequest(options.Subject(subject), sub.Subject, data)")
 	g.P("if err != nil {")
 	g.P("return nil, nil, err")
 	g.P("}")
@@ -600,12 +603,6 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 			g.P("func (c *", unexport(cliName), ") ", method.GoName, "(", req, "opts ...", goNatsPkg.Ident("CallOption"), ") (", resp, "error) {")
 		}
 
-		if broadcasting {
-			g.P("options := ", goNatsImplPkg.Ident("ProcessCallOptions"), "(opts...)")
-			g.P("timeout := options.GetTimeoutOr(c.timeout)")
-			g.P()
-		}
-
 		if method.Output.Location.SourceFile != emptyPb && !broadcasting {
 			g.P("var response ", method.Output.GoIdent)
 			g.P()
@@ -631,16 +628,16 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 			}
 
 			if method.Output.Location.SourceFile != emptyPb {
-				g.P("objs, serviceErrs, err := request(c.nc, timeout, options.DisableFinisher, options.Subject(", strconv.Quote(subjectName(service, method)), "), ", input, ", func(data []byte, rtt ", timeDuration, ") (*", method.Output.GoIdent, ", error) {")
+				g.P("objs, serviceErrs, err := request(c.nc, c.timeout, ", strconv.Quote(subjectName(service, method)), ", ", input, ", func(data []byte, rtt ", timeDuration, ") (*", method.Output.GoIdent, ", error) {")
 				g.P("var obj ", method.Output.GoIdent)
 				g.P("if err := ", protoUnmarshal, "(data, &obj); err != nil {")
 				g.P("return nil, err")
 				g.P("}")
 				g.P("return &obj, nil")
-				g.P("})")
+				g.P("}, opts...)")
 				g.P("return objs, serviceErrs, err")
 			} else {
-				g.P("_, serviceErrs, err := request[struct{}](c.nc, timeout, options.DisableFinisher, options.Subject(", strconv.Quote(subjectName(service, method)), "), ", input, ", nil)")
+				g.P("_, serviceErrs, err := request[struct{}](c.nc, c.timeout, ", strconv.Quote(subjectName(service, method)), ", ", input, ", nil, opts...)")
 				g.P("return serviceErrs, err")
 			}
 		} else {
@@ -664,13 +661,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 
 func generateReqFunc(g *protogen.GeneratedFile, cliName, goName, method string, T any, verb micro.Verb) {
 	g.P("func (c *", unexport(cliName), ") ", method, "(opts ...", goNatsPkg.Ident("CallOption"), ") ([]*", T, ", error) {")
-	g.P("options := ", goNatsImplPkg.Ident("ProcessCallOptions"), "(opts...)")
-	g.P("timeout := options.GetTimeoutOr(c.timeout)")
-	g.P()
-
-	g.P("subject := options.Subject(", strconv.Quote(fmt.Sprintf("%s.%s.%s", micro.APIPrefix, verb, goName)), ")")
-
-	g.P("objs, _, err := request(c.nc, timeout, options.DisableFinisher, subject, nil, func(data []byte, rtt ", timeDuration, ") (*", T, ", error) {")
+	g.P("objs, _, err := request(c.nc, c.timeout, ", strconv.Quote(fmt.Sprintf("%s.%s.%s", micro.APIPrefix, verb, goName)), ", nil, func(data []byte, rtt ", timeDuration, ") (*", T, ", error) {")
 	g.P("var obj ", T)
 	g.P("if err := ", protogen.GoImportPath("encoding/json").Ident("Unmarshal"), "(data, &obj); err != nil {")
 	g.P("return nil, err")
@@ -679,7 +670,7 @@ func generateReqFunc(g *protogen.GeneratedFile, cliName, goName, method string, 
 		g.P("obj.RTT = rtt")
 	}
 	g.P("return &obj, nil")
-	g.P("})")
+	g.P("}, opts...)")
 	g.P("return objs, err")
 	g.P("}")
 	g.P()
