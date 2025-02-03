@@ -1,6 +1,8 @@
-# protoc-gen-go-nats [![PkgGoDev](https://pkg.go.dev/badge/xiam.li/go-nats)](https://pkg.go.dev/xiam.li/go-nats)
+# go-protonats [![PkgGoDev](https://pkg.go.dev/badge/xiam.li/go-nats)](https://pkg.go.dev/xiam.li/go-nats)
 
 This is a protoc plugin that generates Go server and client code for NATS microservices.
+
+Go-ProtoNATS uses the shared [protonats](https://github.com/d0x7/protonats) package and is protocol compatible with the [Java implementation](https://github.com/d0x7/java-protonats).
 
 Prior experience with Protobuf is greatly recommended, especially to understand how the package and imports work.
 
@@ -10,7 +12,7 @@ You already need to have the protoc compiler along the Go protobuf plugin instal
 After that, you can go ahead and install this plugin using the following command:
 
 ```shell
-go install xiam.li/go-nats/cmd/protoc-gen-go-nats@latest
+go install xiam.li/go-protonats/cmd/protoc-gen-go-nats@latest
 ```
 
 To check if the installation was successful, you can run:
@@ -144,37 +146,37 @@ type HelloWorldServiceNATSServer interface {
 
 ### Broadcasting
 
-If you want to broadcast a message to all instances of a service, you can set the `go_nats.broadcast` option to true in the method definition.
+If you want to broadcast a message to all instances of a service, you can set the `protonats.broadcast` option to true in the method definition.
 This will generate a method in the client that will broadcast the message to all instances of the service.
 
-The issue with that is, it requires the client to have the `go_nats.proto` imported, but can be easily done, by appending this to your protoc generation command:
+The issue with that is, it requires the client to have the `protonats.proto` imported, but can be easily done, by appending this to your protoc generation command:
 
 ```shell
--I$(go list -m -f '{{ .Dir }}' xiam.li/go-nats)/proto
+-I$(go list -m -f '{{ .Dir }}' xiam.li/protonats)/proto
 ```
 
-This takes the local directory of the `go-nats` module and adds it as a import path for proto, so that it can find the `go_nats.proto` file in there.
+This takes the local directory of the `go-nats` module and adds it as a import path for proto, so that it can find the `protonats.proto` file in there.
 You can now use it like this:
 
 ```protobuf
 syntax = "proto3";
 package your.package;
 import "google/protobuf/empty.proto";
-import "go_nats.proto";
+import "protonats.proto";
 option go_package = "github.com/user/repo/pb;pb";
 
 service BroadcastingService {
   rpc ABroadcastingMethod(HelloWorldRequest) returns (HelloWorldResponse) {
-    option (go_nats.broadcast) = true;
+    option (protonats.broadcast) = true;
   }
   rpc FanOut(HelloWorldRequest) returns (google.protobuf.Empty) {
-    option (go_nats.broadcast) = true;
+    option (protonats.broadcast) = true;
   }
   rpc FanIn(google.protobuf.Empty) returns (HelloWorldResponse) {
-    option (go_nats.broadcast) = true;
+    option (protonats.broadcast) = true;
   }
   rpc VeryEmptyMethod(google.protobuf.Empty) returns (google.protobuf.Empty) {
-    option (go_nats.broadcast) = true;
+    option (protonats.broadcast) = true;
   }
 }
 ```
@@ -259,24 +261,24 @@ serviceErrs, errs = cli.FanOut(&pb.HelloWorldRequest{Name: "John Doe"})
 
 ### Consensus Integration
 
-If you use a consensus algorithm like Raft, you can use the `go_nats.consensus_Target` option to mark methods to be used only by the leader or follower.
+If you use a consensus algorithm like Raft, you can use the `protonats.consensus_Target` option to mark methods to be used only by the leader or follower.
 These methods will be generated onto a separate interface, which is composited onto the main service interface.
-By default, the normal `NewYourServiceNATSServer` method will still register all methods, regardless of it the target is leader or follower, but you can use the specialized `NewYourServiceNATSLeaderServer` or `NewYourServiceNATSFollowerServer` methods to only register a server for either methods - or you can use the normal `[...]NATSServer` method and pass either a `go_nats.WithoutLeaderFns()` or `go_nats.WithoutFollowerFns()` to disable the registration of these, but still allow for the normal methods to be registered.
+By default, the normal `NewYourServiceNATSServer` method will still register all methods, regardless of it the target is leader or follower, but you can use the specialized `NewYourServiceNATSLeaderServer` or `NewYourServiceNATSFollowerServer` methods to only register a server for either methods - or you can use the normal `[...]NATSServer` method and pass either a `protonats.WithoutLeaderFns()` or `protonats.WithoutFollowerFns()` to disable the registration of these, but still allow for the normal methods to be registered.
 
 Methods marked with a consensus can still use the broadcasting flag, which will for example make a call to that method broadcast to all followers, instead of only one follower. 
 
-To mark methods with a consensus target, use the `go_nats.consensus_target` option in the method definition:
+To mark methods with a consensus target, use the `protonats.consensus_target` option in the method definition:
 
 ```protobuf
 service ConsensusService {
   // The CurrentSnapshot method will only be called on the leader
   rpc CurrentSnapshot(google.protobuf.Empty) returns (Snapshot) {
-    option (go_nats.consensus_target) = LEADER;
+    option (protonats.consensus_target) = LEADER;
   }
   // And the ApplyChange will be sent to all followers, because it's also a broadcast
   rpc ApplyChange(Snapshot) returns (google.protobuf.Empty) {
-    option (go_nats.consensus_target) = FOLLOWER;
-    option (go_nats.broadcast) = true;
+    option (protonats.consensus_target) = FOLLOWER;
+    option (protonats.broadcast) = true;
   }
 }
 ```
@@ -286,10 +288,10 @@ service ConsensusService {
 _ = consensus.NewConsensusServiceNATSServer(conn, impl)
 
 // Normal implementation with follower methods, but leader methods unimplemented
-_ = consensus.NewConsensusServiceNATSServer(conn, impl, go_nats.WithoutLeaderFns())
+_ = consensus.NewConsensusServiceNATSServer(conn, impl, protonats.WithoutLeaderFns())
 
 // Normal implementation with leader methods, but follower methods unimplemented
-_ = consensus.NewConsensusServiceNATSServer(conn, impl, go_nats.WithoutFollowerFns())
+_ = consensus.NewConsensusServiceNATSServer(conn, impl, protonats.WithoutFollowerFns())
 
 // Follower-only implementation - only those marked as follower methods will be registered 
 // Notice the use of the [...]NATSFollowerServer interface instead the broader [...]NATSServer interface
@@ -305,21 +307,21 @@ _ = consensus.NewConsensusServiceNATSLeaderServer(conn, impl)
 You can also send custom errors to the client, but for that you need to add this package to your project:
 
 ```shell
-go get xiam.li/go-nats
+go get xiam.li/go-protonats
 ```
 
-Then, you can use the `go_nats.ServerError` type to send custom errors to the client:
+Then, you can use the `protonats.ServerError` type to send custom errors to the client:
 
 ```go
 // In any method of your service implementation, do the following
 // Or, if you want to return a custom error:
-return nil, go_nats.NewServerErr("400", "Unknown Name")
+return nil, protonats.NewServerErr("400", "Unknown Name")
 
 // Or, you can also wrap an existing error for more detailed information:
-return nil, go_nats.WrapServerErr(err, "500", "Failed to query database")
+return nil, protonats.WrapServerErr(err, "500", "Failed to query database")
 
 // You can also send custom headers using this method:
-serverErr := go_nats.NewServerErr("400", "Unknown Name")
+serverErr := protonats.NewServerErr("400", "Unknown Name")
 serverErr.AddHeader("err-details", "Username is not in the database")
 return nil, serverErr
 ```
@@ -329,7 +331,7 @@ On the client side they are received as `ServiceError` (Important: ServiceError,
 ```go
 _, err := cli.HelloWorld(&pb.HelloWorldRequest{Name: "John Doe"})
 if err != nil {
-    serviceErr, isSrvErr := go_nats.AsServiceError(err)
+    serviceErr, isSrvErr := protonats.AsServiceError(err)
     if isSrvErr {
         fmt.Printf("Got a service error with code %s: %s\n", serviceErr.Code, serviceErr.Description)
     } else {
@@ -338,7 +340,7 @@ if err != nil {
 }
 ```
 
-You can also use `go_nats.IsServiceError(err)` to check if an error is a ServiceError.
+You can also use `protonats.IsServiceError(err)` to check if an error is a ServiceError.
 
 There's also an `Details` field in the ServiceError struct, but that's only used when
 the server, instead of returning a proper ServerError, only returns a generic error.
