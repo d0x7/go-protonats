@@ -3,7 +3,7 @@ package test
 import (
 	"fmt"
 	"time"
-	"xiam.li/go-nats"
+	"xiam.li/go-protonats"
 )
 
 type testImplementation struct {
@@ -31,19 +31,19 @@ func (t *testImplementation) NormalEmptyEmpty() error {
 }
 
 func (t *testImplementation) ErrServiceError(*Test) (*Test, error) {
-	return nil, go_nats.ServiceError{Code: "1337", Description: "This is a service error"}
+	return nil, goprotonats.ServiceError{Code: "1337", Description: "This is a service error"}
 }
 
 func (t *testImplementation) ErrServerError(*Test) (*Test, error) {
-	return nil, go_nats.NewServerErr("1337", "This is a server error")
+	return nil, goprotonats.NewServerErr("1337", "This is a server error")
 }
 
 func (t *testImplementation) ErrServiceErrorBroadcast(*Test) (*Test, error) {
-	return nil, go_nats.ServiceError{Code: "1337", Description: "This is a service error from " + t.id}
+	return nil, goprotonats.ServiceError{Code: "1337", Description: "This is a service error from " + t.id}
 }
 
 func (t *testImplementation) ErrServerErrorBroadcast(*Test) (*Test, error) {
-	return nil, go_nats.NewServerErr("1337", "This is a server error from "+t.id)
+	return nil, goprotonats.NewServerErr("1337", "This is a server error from "+t.id)
 }
 
 func (t *testImplementation) NormalBroadcastTestTest(req *Test) (*Test, error) {

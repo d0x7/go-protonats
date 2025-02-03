@@ -1,4 +1,4 @@
-package go_nats
+package goprotonats
 
 import (
 	"context"

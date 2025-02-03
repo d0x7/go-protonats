@@ -1,4 +1,4 @@
-module xiam.li/go-nats
+module xiam.li/goprotonats
 
 go 1.23.5
 
