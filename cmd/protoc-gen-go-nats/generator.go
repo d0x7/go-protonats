@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"github.com/nats-io/nats.go/micro"
 	"google.golang.org/protobuf/compiler/protogen"
-	"google.golang.org/protobuf/proto"
 	"strconv"
 	"strings"
-	gonats_proto "xiam.li/go-nats/proto"
+	"xiam.li/protonats/go"
 )
 
 const (
@@ -55,8 +54,6 @@ func protocVersion(gen *protogen.Plugin) string {
 	return fmt.Sprintf("%d.%d.%d%s", v.GetMajor(), v.GetMinor(), v.GetPatch(), suffix)
 }
 
-func unexport(s string) string { return strings.ToLower(s[:1]) + s[1:] }
-
 func generateFile(gen *protogen.Plugin, file *protogen.File) error {
 	if len(file.Services) == 0 {
 		return nil
@@ -81,22 +78,6 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) error {
 		}
 	}
 	return nil
-}
-
-func isUsingBroadcasting(method *protogen.Method) bool {
-	if !proto.HasExtension(method.Desc.Options(), gonats_proto.E_Broadcast) {
-		return false
-	}
-	extension := proto.GetExtension(method.Desc.Options(), gonats_proto.E_Broadcast)
-	return extension.(bool)
-}
-
-func getConsensusTarget(method *protogen.Method) *gonats_proto.ConsensusTarget {
-	if !proto.HasExtension(method.Desc.Options(), gonats_proto.E_ConsensusTarget) {
-		return nil
-	}
-	extension := proto.GetExtension(method.Desc.Options(), gonats_proto.E_ConsensusTarget).(gonats_proto.ConsensusTarget)
-	return &extension
 }
 
 func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error {
@@ -127,9 +108,8 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 		}
 		fn := fmt.Sprintf("%s%s(%s) (%serror)", method.Comments.Leading, method.GoName, req, resp)
 
-		consensusTarget := getConsensusTarget(method)
-		if consensusTarget != nil {
-			if *consensusTarget == gonats_proto.ConsensusTarget_LEADER {
+		if consensusTarget := getConsensusTarget(method); consensusTarget != nil {
+			if *consensusTarget == protonats.ConsensusTarget_LEADER {
 				leaderMethods = append(leaderMethods, fn)
 			} else {
 				followerMethods = append(followerMethods, fn)
@@ -243,10 +223,9 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 				// TODO: Skipping currently unsupported streaming methods for now
 				continue
 			}
-			if target := getConsensusTarget(method); target == nil || *target != gonats_proto.ConsensusTarget_LEADER {
-				continue
+			if isConsensusLeader(method) {
+				generateEndpointHandler(g, service, method)
 			}
-			generateEndpointHandler(g, service, method)
 		}
 		g.P("}")
 		g.P()
@@ -276,10 +255,9 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 				// TODO: Skipping currently unsupported streaming methods for now
 				continue
 			}
-			if target := getConsensusTarget(method); target == nil || *target != gonats_proto.ConsensusTarget_FOLLOWER {
-				continue
+			if isConsensusFollower(method) {
+				generateEndpointHandler(g, service, method)
 			}
-			generateEndpointHandler(g, service, method)
 		}
 		g.P("}")
 		g.P()
