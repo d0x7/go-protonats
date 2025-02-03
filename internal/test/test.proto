@@ -1,9 +1,9 @@
 syntax = "proto3";
 
-package go_nats.test;
+package protonats.test;
 
 import "google/protobuf/empty.proto";
-import "go_nats.proto";
+import "protonats.proto";
 
 option go_package = "xiam.li/go-nats/internal/test";
 
@@ -18,88 +18,88 @@ service TestService {
   rpc ErrServiceError(Test) returns (Test);
   rpc ErrServerError(Test) returns (Test);
   rpc ErrServiceErrorBroadcast(Test) returns (Test) {
-    option (go_nats.broadcast) = true;
+    option (protonats.broadcast) = true;
   }
   rpc ErrServerErrorBroadcast(Test) returns (Test) {
-    option (go_nats.broadcast) = true;
+    option (protonats.broadcast) = true;
   }
 
   // Normal tests with broadcast option
   rpc NormalBroadcastTestTest(Test) returns (Test) {
-    option (go_nats.broadcast) = true;
+    option (protonats.broadcast) = true;
   }
   rpc NormalBroadcastEmptyTest(google.protobuf.Empty) returns (Test) {
-    option (go_nats.broadcast) = true;
+    option (protonats.broadcast) = true;
   }
   rpc NormalBroadcastTestEmpty(Test) returns (google.protobuf.Empty) {
-    option (go_nats.broadcast) = true;
+    option (protonats.broadcast) = true;
   }
   rpc NormalBroadcastEmptyEmpty(google.protobuf.Empty) returns (google.protobuf.Empty) {
-    option (go_nats.broadcast) = true;
+    option (protonats.broadcast) = true;
   }
 
   // Leader option tests
   rpc LeaderOnlyTestTest(Test) returns (Test) {
-    option (go_nats.consensus_target) = LEADER;
+    option (protonats.consensus_target) = LEADER;
   }
   rpc LeaderOnlyEmptyTest(google.protobuf.Empty) returns (Test) {
-    option (go_nats.consensus_target) = LEADER;
+    option (protonats.consensus_target) = LEADER;
   }
   rpc LeaderOnlyTestEmpty(Test) returns (google.protobuf.Empty) {
-    option (go_nats.consensus_target) = LEADER;
+    option (protonats.consensus_target) = LEADER;
   }
   rpc LeaderOnlyEmptyEmpty(google.protobuf.Empty) returns (google.protobuf.Empty) {
-    option (go_nats.consensus_target) = LEADER;
+    option (protonats.consensus_target) = LEADER;
   }
 
   // Leader with broadcast option tests
   rpc LeaderOnlyBroadcastTestTest(Test) returns (Test) {
-    option (go_nats.consensus_target) = LEADER;
-    option (go_nats.broadcast) = true;
+    option (protonats.consensus_target) = LEADER;
+    option (protonats.broadcast) = true;
   }
   rpc LeaderOnlyBroadcastEmptyTest(google.protobuf.Empty) returns (Test) {
-    option (go_nats.consensus_target) = LEADER;
-    option (go_nats.broadcast) = true;
+    option (protonats.consensus_target) = LEADER;
+    option (protonats.broadcast) = true;
   }
   rpc LeaderOnlyBroadcastTestEmpty(Test) returns (google.protobuf.Empty) {
-    option (go_nats.consensus_target) = LEADER;
-    option (go_nats.broadcast) = true;
+    option (protonats.consensus_target) = LEADER;
+    option (protonats.broadcast) = true;
   }
   rpc LeaderOnlyBroadcastEmptyEmpty(google.protobuf.Empty) returns (google.protobuf.Empty) {
-    option (go_nats.consensus_target) = LEADER;
-    option (go_nats.broadcast) = true;
+    option (protonats.consensus_target) = LEADER;
+    option (protonats.broadcast) = true;
   }
 
   // Follower option tests
   rpc FollowerOnlyTestTest(Test) returns (Test) {
-    option (go_nats.consensus_target) = FOLLOWER;
+    option (protonats.consensus_target) = FOLLOWER;
   }
   rpc FollowerOnlyEmptyTest(google.protobuf.Empty) returns (Test) {
-    option (go_nats.consensus_target) = FOLLOWER;
+    option (protonats.consensus_target) = FOLLOWER;
   }
   rpc FollowerOnlyTestEmpty(Test) returns (google.protobuf.Empty) {
-    option (go_nats.consensus_target) = FOLLOWER;
+    option (protonats.consensus_target) = FOLLOWER;
   }
   rpc FollowerOnlyEmptyEmpty(google.protobuf.Empty) returns (google.protobuf.Empty) {
-    option (go_nats.consensus_target) = FOLLOWER;
+    option (protonats.consensus_target) = FOLLOWER;
   }
 
   // Follower with broadcast option tests
   rpc FollowerOnlyBroadcastTestTest(Test) returns (Test) {
-    option (go_nats.consensus_target) = FOLLOWER;
-    option (go_nats.broadcast) = true;
+    option (protonats.consensus_target) = FOLLOWER;
+    option (protonats.broadcast) = true;
   }
   rpc FollowerOnlyBroadcastEmptyTest(google.protobuf.Empty) returns (Test) {
-    option (go_nats.consensus_target) = FOLLOWER;
-    option (go_nats.broadcast) = true;
+    option (protonats.consensus_target) = FOLLOWER;
+    option (protonats.broadcast) = true;
   }
   rpc FollowerOnlyBroadcastTestEmpty(Test) returns (google.protobuf.Empty) {
-    option (go_nats.consensus_target) = FOLLOWER;
-    option (go_nats.broadcast) = true;
+    option (protonats.consensus_target) = FOLLOWER;
+    option (protonats.broadcast) = true;
   }
   rpc FollowerOnlyBroadcastEmptyEmpty(google.protobuf.Empty) returns (google.protobuf.Empty) {
-    option (go_nats.consensus_target) = FOLLOWER;
-    option (go_nats.broadcast) = true;
+    option (protonats.consensus_target) = FOLLOWER;
+    option (protonats.broadcast) = true;
   }
 
   // Special cases
