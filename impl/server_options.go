@@ -3,7 +3,7 @@ package impl
 import (
 	"github.com/nats-io/nats.go/micro"
 	"time"
-	"xiam.li/go-nats"
+	"xiam.li/go-protonats"
 )
 
 type ServerOpts struct {
@@ -18,7 +18,7 @@ type ServerOpts struct {
 	ErrorHandler             *micro.ErrHandler
 }
 
-func ProcessServerOptions(config *micro.Config, opts ...go_nats.ServerOption) *ServerOpts {
+func ProcessServerOptions(config *micro.Config, opts ...goprotonats.ServerOption) *ServerOpts {
 	options := new(ServerOpts)
 	for _, opt := range opts {
 		opt(options)
@@ -81,4 +81,4 @@ func _subject(subject, extra, suffix string) string {
 }
 
 // Interface guard
-var _ go_nats.ServerOptions = (*ServerOpts)(nil)
+var _ goprotonats.ServerOptions = (*ServerOpts)(nil)

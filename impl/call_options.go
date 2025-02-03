@@ -3,7 +3,7 @@ package impl
 import (
 	"context"
 	"time"
-	"xiam.li/go-nats"
+	"xiam.li/go-protonats"
 )
 
 type CallOpts struct {
@@ -20,7 +20,7 @@ func (opts *CallOpts) WithoutFinisher() {
 	opts.DisableFinisher = true
 }
 
-func ProcessCallOptions(opts ...go_nats.CallOption) *CallOpts {
+func ProcessCallOptions(opts ...goprotonats.CallOption) *CallOpts {
 	options := new(CallOpts)
 	for _, opt := range opts {
 		opt(options)
@@ -97,4 +97,4 @@ func (opts *CallOpts) Ctx() context.Context {
 }
 
 // Interface guard
-var _ go_nats.CallOptions = (*CallOpts)(nil)
+var _ goprotonats.CallOptions = (*CallOpts)(nil)

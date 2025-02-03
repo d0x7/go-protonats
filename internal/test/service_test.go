@@ -3,7 +3,7 @@ package test
 import (
 	"github.com/nats-io/nats.go/micro"
 	"testing"
-	"xiam.li/go-nats/impl"
+	"xiam.li/go-protonats/impl"
 )
 
 type serviceImpl struct {
