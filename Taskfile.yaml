@@ -31,5 +31,4 @@ tasks:
   proto:
     desc: Generate protobuf files
     cmds:
-      - fd -t f -e proto . proto -x protoc -I proto --go_out=proto --go_opt=paths=source_relative --go-nats_out=proto --go-nats_opt=paths=source_relative {}
-      - fd -t f -e proto . internal/test -x protoc -I$(go list -m -f '{{ "{{ .Dir }}" }}' xiam.li/go-nats)/proto -I internal/test --go_out=internal/test --go_opt=paths=source_relative --go-nats_out=internal/test --go-nats_opt=paths=source_relative {}
+      - fd -t f -e proto . internal/test -x protoc -I$(go list -m -f '{{ "{{ .Dir }}" }}' xiam.li/protonats)/proto -I internal/test --go_out=internal/test --go_opt=paths=source_relative --go-nats_out=internal/test --go-nats_opt=paths=source_relative {}

@@ -19,6 +19,7 @@ require (
 	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
+	xiam.li/protonats v0.0.0-20250203174501-d677617071f3 // indirect
 )
 
 retract v0.1.4
