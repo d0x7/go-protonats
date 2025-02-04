@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package protonats.test;
+package protonats.go.test;
 
 import "google/protobuf/empty.proto";
 import "protonats.proto";

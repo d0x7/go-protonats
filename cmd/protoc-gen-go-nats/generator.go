@@ -7,7 +7,8 @@ import (
 	"google.golang.org/protobuf/compiler/protogen"
 	"strconv"
 	"strings"
-	"xiam.li/protonats/go"
+	"xiam.li/protonats/go/plugin"
+	"xiam.li/protonats/go/protonats"
 )
 
 const (
@@ -16,8 +17,8 @@ const (
 	nuidPkg       = protogen.GoImportPath("github.com/nats-io/nuid")
 	timePkg       = protogen.GoImportPath("time")
 	protoPkg      = protogen.GoImportPath("google.golang.org/protobuf/proto")
-	goNatsPkg     = protogen.GoImportPath("xiam.li/go-protonats")
-	goNatsImplPkg = protogen.GoImportPath("xiam.li/go-protonats/impl")
+	goNatsPkg     = protogen.GoImportPath("xiam.li/protonats/go/protonats")
+	goNatsImplPkg = protogen.GoImportPath("xiam.li/protonats/go/impl")
 	errorsPkg     = protogen.GoImportPath("errors")
 	slogPkg       = protogen.GoImportPath("log/slog")
 	contextPkg    = protogen.GoImportPath("context")
@@ -108,7 +109,7 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 		}
 		fn := fmt.Sprintf("%s%s(%s) (%serror)", method.Comments.Leading, method.GoName, req, resp)
 
-		if consensusTarget := getConsensusTarget(method); consensusTarget != nil {
+		if consensusTarget := plugin.GetConsensusTarget(method); consensusTarget != nil {
 			if *consensusTarget == protonats.ConsensusTarget_LEADER {
 				leaderMethods = append(leaderMethods, fn)
 			} else {
@@ -190,7 +191,7 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 			// TODO: Skipping currently unsupported streaming methods for now
 			continue
 		}
-		if getConsensusTarget(method) != nil {
+		if plugin.GetConsensusTarget(method) != nil {
 			continue
 		}
 		generateEndpointHandler(g, service, method)
@@ -223,7 +224,7 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 				// TODO: Skipping currently unsupported streaming methods for now
 				continue
 			}
-			if isConsensusLeader(method) {
+			if plugin.IsConsensusLeader(method) {
 				generateEndpointHandler(g, service, method)
 			}
 		}
@@ -255,7 +256,7 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 				// TODO: Skipping currently unsupported streaming methods for now
 				continue
 			}
-			if isConsensusFollower(method) {
+			if plugin.IsConsensusFollower(method) {
 				generateEndpointHandler(g, service, method)
 			}
 		}
@@ -310,7 +311,7 @@ func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Servic
 	}
 	g.P("})")
 
-	if isUsingBroadcasting(method) {
+	if plugin.IsUsingBroadcasting(method) {
 		// Add a broadcast endpoint for the method
 		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Broadcast"), ", ", handler, ", ", microPkg.Ident("WithEndpointQueueGroup"), "(", nuidPkg.Ident("Next"), "()), opts.Subject(", strconv.Quote(subjectName(service, method)), ", ", strconv.Quote(""), "))")
 	} else {
@@ -346,7 +347,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 		if _, ok := reservedKeywords[strings.ToLower(method.GoName)]; ok {
 			return errors.New("reserved keyword '" + method.GoName + "' used as method name")
 		}
-		broadcasting := isUsingBroadcasting(method)
+		broadcasting := plugin.IsUsingBroadcasting(method)
 		var req, resp string
 		if method.Input.Location.SourceFile != emptyPb {
 			req = "req *" + g.QualifiedGoIdent(method.Input.GoIdent) + ", "
@@ -560,7 +561,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 			// TODO: Skipping currently unsupported streaming methods for now
 			continue
 		}
-		broadcasting := isUsingBroadcasting(method)
+		broadcasting := plugin.IsUsingBroadcasting(method)
 
 		var req, resp, handleReq, handleResp, returnResp string
 		if method.Input.Location.SourceFile != emptyPb {

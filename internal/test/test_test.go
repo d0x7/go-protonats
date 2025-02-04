@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	nats_go "github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go"
 	"regexp"
 	"slices"
 	"testing"
 	"time"
-	"xiam.li/go-protonats"
+	"xiam.li/protonats/go/protonats"
 )
 
 func TestInfo(t *testing.T) {
@@ -18,7 +18,7 @@ func TestInfo(t *testing.T) {
 	t.Cleanup(instance.Stop)
 	var ids []string
 	for range 10 {
-		id := NewTestServiceNATSServer(instance.Conn, new(testImplementation), goprotonats.WithoutLeaderFns(), goprotonats.WithoutFollowerFns()).Info().ID
+		id := NewTestServiceNATSServer(instance.Conn, new(testImplementation), protonats.WithoutLeaderFns(), protonats.WithoutFollowerFns()).Info().ID
 		ids = append(ids, id)
 	}
 	cli := NewTestServiceNATSClient(instance.Conn)
@@ -40,7 +40,7 @@ func TestInfo(t *testing.T) {
 
 	t.Run("WithoutFinisher", func(t *testing.T) {
 		now := time.Now()
-		info, err := cli.Info(goprotonats.WithoutFinisher())
+		info, err := cli.Info(protonats.WithoutFinisher())
 		dur := time.Since(now)
 		if err != nil {
 			t.Fatalf("Error calling method: %v", err)
@@ -60,7 +60,7 @@ func TestNormal(t *testing.T) {
 	t.Cleanup(instance.Stop)
 	var ids []string
 	for range 3 {
-		id := NewTestServiceNATSServer(instance.Conn, new(testImplementation), goprotonats.WithoutLeaderFns(), goprotonats.WithoutFollowerFns()).Info().ID
+		id := NewTestServiceNATSServer(instance.Conn, new(testImplementation), protonats.WithoutLeaderFns(), protonats.WithoutFollowerFns()).Info().ID
 		ids = append(ids, id)
 	}
 	cli := NewTestServiceNATSClient(instance.Conn)
@@ -120,7 +120,7 @@ func TestNormalBroadcast(t *testing.T) {
 	t.Cleanup(instance.Stop)
 	var ids []string
 	for range 3 {
-		id := NewTestServiceNATSServer(instance.Conn, new(testImplementation), goprotonats.WithoutLeaderFns(), goprotonats.WithoutFollowerFns()).Info().ID
+		id := NewTestServiceNATSServer(instance.Conn, new(testImplementation), protonats.WithoutLeaderFns(), protonats.WithoutFollowerFns()).Info().ID
 		ids = append(ids, id)
 	}
 	cli := NewTestServiceNATSClient(instance.Conn)
@@ -200,7 +200,7 @@ func TestErr(t *testing.T) {
 	t.Parallel()
 	instance := newNATS(t)
 	t.Cleanup(instance.Stop)
-	NewTestServiceNATSServer(instance.Conn, new(testImplementation), goprotonats.WithoutLeaderFns(), goprotonats.WithoutFollowerFns())
+	NewTestServiceNATSServer(instance.Conn, new(testImplementation), protonats.WithoutLeaderFns(), protonats.WithoutFollowerFns())
 	cli := NewTestServiceNATSClient(instance.Conn)
 
 	t.Run("ServiceError", func(t *testing.T) {
@@ -212,7 +212,7 @@ func TestErr(t *testing.T) {
 		if resp != nil {
 			t.Fatalf("Expected nil response, got: %v", resp)
 		}
-		if !goprotonats.IsServiceError(err) {
+		if !protonats.IsServiceError(err) {
 			t.Fatalf("Expected service error, got: %v", err)
 		}
 	})
@@ -226,7 +226,7 @@ func TestErr(t *testing.T) {
 		if resp != nil {
 			t.Fatalf("Expected nil response, got: %v", resp)
 		}
-		if !goprotonats.IsServiceError(err) {
+		if !protonats.IsServiceError(err) {
 			t.Fatalf("Expected service error, got: %v", err)
 		}
 	})
@@ -256,7 +256,7 @@ func TestErrBroadcast(t *testing.T) {
 			t.Fatalf("Expected 3 service errors, got %d: %v", len(srvErrs), srvErrs)
 		}
 		for _, e := range srvErrs {
-			if !goprotonats.IsServiceError(e) {
+			if !protonats.IsServiceError(e) {
 				t.Fatalf("Expected service error, got: %v", e)
 			}
 		}
@@ -275,7 +275,7 @@ func TestErrBroadcast(t *testing.T) {
 			t.Fatalf("Expected 3 service errors, got %d: %v", len(srvErrs), srvErrs)
 		}
 		for _, e := range srvErrs {
-			if !goprotonats.IsServiceError(e) {
+			if !protonats.IsServiceError(e) {
 				t.Fatalf("Expected service error, got: %v", e)
 			}
 		}
@@ -557,7 +557,7 @@ func TestExtraSubject(t *testing.T) {
 	for i := range 3 {
 		id := fmt.Sprintf("instance%02d", i)
 		impl := new(testImplementation)
-		_ = NewTestServiceNATSServer(instance.Conn, impl, goprotonats.WithExtraSubjectSrv(id))
+		_ = NewTestServiceNATSServer(instance.Conn, impl, protonats.WithExtraSubjectSrv(id))
 		ids = append(ids, impl.id)
 		impl.id = impl.id + " aka " + id
 	}
@@ -567,7 +567,7 @@ func TestExtraSubject(t *testing.T) {
 		id := fmt.Sprintf("instance%02d", i)
 		t.Run("EmptyTest/"+id, func(t *testing.T) {
 			t.Parallel()
-			resp, srvErrs, err := cli.NormalBroadcastEmptyTest(goprotonats.WithExtraSubject(id))
+			resp, srvErrs, err := cli.NormalBroadcastEmptyTest(protonats.WithExtraSubject(id))
 			if err != nil {
 				t.Fatalf("Error calling method: %v", err)
 			}
@@ -603,11 +603,11 @@ func TestContext(t *testing.T) {
 
 	t.Run("WithTimeout", func(t *testing.T) {
 		t.Parallel()
-		err := cli.ThreeSecondDelay(goprotonats.WithTimeout(1 * time.Second))
+		err := cli.ThreeSecondDelay(protonats.WithTimeout(1 * time.Second))
 		if err == nil {
 			t.Fatalf("Expected error, got nil")
 		}
-		if !errors.Is(err, nats_go.ErrTimeout) {
+		if !errors.Is(err, nats.ErrTimeout) {
 			t.Fatalf("Expected timeout error, got: %v", err)
 		}
 	})
@@ -620,7 +620,7 @@ func TestContext(t *testing.T) {
 			time.Sleep(1 * time.Second)
 			cancel()
 		}()
-		err := cli.ThreeSecondDelay(goprotonats.WithContext(ctx))
+		err := cli.ThreeSecondDelay(protonats.WithContext(ctx))
 		if err == nil {
 			t.Fatalf("Expected error, got nil")
 		}
@@ -633,7 +633,7 @@ func TestContext(t *testing.T) {
 		t.Parallel()
 		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		err := cli.ThreeSecondDelay(goprotonats.WithContext(ctx))
+		err := cli.ThreeSecondDelay(protonats.WithContext(ctx))
 		if err == nil {
 			t.Fatalf("Expected error, got nil")
 		}
