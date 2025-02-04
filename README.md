@@ -1,10 +1,15 @@
-# go-protonats [![PkgGoDev](https://pkg.go.dev/badge/xiam.li/go-nats)](https://pkg.go.dev/xiam.li/go-nats)
+# go-protonats [![PkgGoDev](https://pkg.go.dev/badge/xiam.li/go-protonats)](https://pkg.go.dev/xiam.li/go-protonats)
 
 This is a protoc plugin that generates Go server and client code for NATS microservices.
 
 Go-ProtoNATS uses the shared [protonats](https://github.com/d0x7/protonats) package and is protocol compatible with the [Java implementation](https://github.com/d0x7/java-protonats).
 
 Prior experience with Protobuf is greatly recommended, especially to understand how the package and imports work.
+
+> [!IMPORTANT]
+> Please note that the structure has greatly been changed since the last release.
+> This repository now only contains the protoc-gen-go-nats compiler plugin, but not the runtime code.
+> For that, please refer to [protonats](https://github.com/d0x7/protonats) and import that module instead.
 
 ## Installation
 
@@ -155,7 +160,7 @@ The issue with that is, it requires the client to have the `protonats.proto` imp
 -I$(go list -m -f '{{ .Dir }}' xiam.li/protonats)/proto
 ```
 
-This takes the local directory of the `go-nats` module and adds it as a import path for proto, so that it can find the `protonats.proto` file in there.
+This takes the local directory of the `protonats` module and adds it as a import path for proto, so that it can find the `protonats.proto` file in there.
 You can now use it like this:
 
 ```protobuf
@@ -307,7 +312,7 @@ _ = consensus.NewConsensusServiceNATSLeaderServer(conn, impl)
 You can also send custom errors to the client, but for that you need to add this package to your project:
 
 ```shell
-go get xiam.li/go-protonats
+go get xiam.li/protonats
 ```
 
 Then, you can use the `protonats.ServerError` type to send custom errors to the client:
