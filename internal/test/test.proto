@@ -5,7 +5,7 @@ package protonats.go.test;
 import "google/protobuf/empty.proto";
 import "protonats.proto";
 
-option go_package = "xiam.li/go-nats/internal/test";
+option go_package = "xiam.li/go-protonats/internal/test";
 
 service TestService {
   // Normal tests

@@ -642,3 +642,21 @@ func TestContext(t *testing.T) {
 		}
 	})
 }
+
+func TestNoResponder(t *testing.T) {
+	t.Parallel()
+	instance := newNATS(t)
+	t.Cleanup(instance.Stop)
+	cli := NewTestServiceNATSClient(instance.Conn)
+
+	t.Run("NoResponder", func(t *testing.T) {
+		t.Parallel()
+		err := cli.NormalEmptyEmpty()
+		if err == nil {
+			t.Fatalf("Expected error, got nil")
+		}
+		if !errors.Is(err, nats.ErrNoResponders) {
+			t.Fatalf("Expected no responder error, got: %v", err)
+		}
+	})
+}
