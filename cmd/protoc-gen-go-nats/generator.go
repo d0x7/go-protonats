@@ -95,7 +95,7 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 		if method.Output.Location.SourceFile != emptyPb {
 			resp = "*" + g.QualifiedGoIdent(method.Output.GoIdent) + ", "
 		}
-		fn := fmt.Sprintf("%s%s(%s) (%serror)", method.Comments.Leading, method.GoName, req, resp)
+		fn := fmt.Sprintf("%s%s(ctx context.Context, %s) (%serror)", method.Comments.Leading, method.GoName, req, resp)
 
 		if consensusTarget := plugin.GetConsensusTarget(method); consensusTarget != nil {
 			if *consensusTarget == protonats.ConsensusTarget_LEADER {
@@ -142,32 +142,41 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 	g.P()
 
 	// Generate NewServer function
-	g.P("func New", srvName, "(nc *", natsConn, ", server ", srvName, ", opts ...", goNatsPkg.Ident("ServerOption"), ") ", microPkg.Ident("Service"), " {")
+	g.P("func New", srvName, "(nc *", natsConn, ", server ", srvName, ", opts ...", goNatsPkg.Ident("ServerOption"), ") ", "(", microPkg.Ident("Service"), ", error) {")
 	g.P("service, options, err := ", goNatsImplPkg.Ident("NewService"), "(", strconv.Quote(service.GoName), ", nc, server, opts...)")
 	g.P("if err != nil {")
-	g.P("panic(err) // TODO: Update this to proper error handling")
+	g.P("return nil, err")
 	g.P("}")
 	g.P("if setId, ok := server.(", service.GoName, "Id); ok {")
 	g.P("setId.Set", service.GoName, "Id(service.Info().ID)")
 	g.P("}")
 
-	g.P("_new", service.GoName, "Server(service, server, options)")
+	g.P("err = _new", service.GoName, "Server(service, server, options)")
+	g.P("if err != nil {")
+	g.P("return nil, err")
+	g.P("}")
 	g.P()
 
 	if len(leaderMethods) > 0 {
 		g.P("if !options.WithoutLeaderFunctions {")
-		g.P("_new", service.GoName, "LeaderServer(service, server, options)")
+		g.P("err = _new", service.GoName, "LeaderServer(service, server, options)")
+		g.P("if err != nil {")
+		g.P("return nil, err")
+		g.P("}")
 		g.P("}")
 	}
 	if len(followerMethods) > 0 {
 		g.P("if !options.WithoutFollowerFunctions {")
-		g.P("_new", service.GoName, "FollowerServer(service, server, options)")
+		g.P("err = _new", service.GoName, "FollowerServer(service, server, options)")
+		g.P("if err != nil {")
+		g.P("return nil, err")
+		g.P("}")
 		g.P("}")
 	}
-	g.P("return service")
+	g.P("return service, nil")
 	g.P("}")
 
-	g.P("func _new", service.GoName, "Server(service micro.Service, server ", service.GoName, "NATSServer, opts *", goNatsImplPkg.Ident("ServerOpts"), ") {")
+	g.P("func _new", service.GoName, "Server(service micro.Service, server ", service.GoName, "NATSServer, opts *", goNatsImplPkg.Ident("ServerOpts"), ") error {")
 	g.P("var err error")
 	g.P("_ = err") // In case there are no more methods so that err isn't unused
 	g.P()
@@ -184,26 +193,29 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 		}
 		generateEndpointHandler(g, service, method)
 	}
-
+	g.P("return nil")
 	g.P("}")
 	g.P()
 
 	// Generate NewLeaderServer function
 	if len(leaderMethods) > 0 {
-		g.P("func New", service.GoName, "NATSLeaderServer(nc *", natsConn, ", server ", service.GoName, "NATSLeaderServer, opts ...", goNatsPkg.Ident("ServerOption"), ") ", microPkg.Ident("Service"), " {")
+		g.P("func New", service.GoName, "NATSLeaderServer(nc *", natsConn, ", server ", service.GoName, "NATSLeaderServer, opts ...", goNatsPkg.Ident("ServerOption"), ") ", "(", microPkg.Ident("Service"), ", error) {")
 		g.P("service, options, err := ", goNatsImplPkg.Ident("NewService"), "(", strconv.Quote(service.GoName), ", nc, server, opts...)")
 		g.P("if err != nil {")
-		g.P("panic(err) // TODO: Update this to proper error handling")
+		g.P("return nil, err")
 		g.P("}")
 		g.P("if setId, ok := server.(", service.GoName, "Id); ok {")
 		g.P("setId.Set", service.GoName, "Id(service.Info().ID)")
 		g.P("}")
-		g.P("_new", service.GoName, "LeaderServer(service, server, options)")
-		g.P("return service")
+		g.P("err = _new", service.GoName, "LeaderServer(service, server, options)")
+		g.P("if err != nil {")
+		g.P("return nil, err")
+		g.P("}")
+		g.P("return service, nil")
 		g.P("}")
 		g.P()
 
-		g.P("func _new", service.GoName, "LeaderServer(service micro.Service, server ", service.GoName, "NATSLeaderServer, opts *", goNatsImplPkg.Ident("ServerOpts"), ") {")
+		g.P("func _new", service.GoName, "LeaderServer(service micro.Service, server ", service.GoName, "NATSLeaderServer, opts *", goNatsImplPkg.Ident("ServerOpts"), ") error {")
 		g.P("var err error")
 		g.P("_ = err") // In case there are no more methods so that err isn't unused
 
@@ -216,26 +228,30 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 				generateEndpointHandler(g, service, method)
 			}
 		}
+		g.P("return nil")
 		g.P("}")
 		g.P()
 	}
 
 	// Generate NewFollowerServer function
 	if len(followerMethods) > 0 {
-		g.P("func New", service.GoName, "NATSFollowerServer(nc *", natsConn, ", server ", service.GoName, "NATSFollowerServer, opts ...", goNatsPkg.Ident("ServerOption"), ") ", microPkg.Ident("Service"), " {")
+		g.P("func New", service.GoName, "NATSFollowerServer(nc *", natsConn, ", server ", service.GoName, "NATSFollowerServer, opts ...", goNatsPkg.Ident("ServerOption"), ") ", "(", microPkg.Ident("Service"), ", error) {")
 		g.P("service, options, err := ", goNatsImplPkg.Ident("NewService"), "(", strconv.Quote(service.GoName), ", nc, server, opts...)")
 		g.P("if err != nil {")
-		g.P("panic(err) // TODO: Update this to proper error handling")
+		g.P("return nil, err")
 		g.P("}")
 		g.P("if setId, ok := server.(", service.GoName, "Id); ok {")
 		g.P("setId.Set", service.GoName, "Id(service.Info().ID)")
 		g.P("}")
-		g.P("_new", service.GoName, "FollowerServer(service, server, options)")
-		g.P("return service")
+		g.P("err = _new", service.GoName, "FollowerServer(service, server, options)")
+		g.P("if err != nil {")
+		g.P("return nil, err")
+		g.P("}")
+		g.P("return service, nil")
 		g.P("}")
 		g.P()
 
-		g.P("func _new", service.GoName, "FollowerServer(service micro.Service, server ", service.GoName, "NATSFollowerServer, opts *", goNatsImplPkg.Ident("ServerOpts"), ") {")
+		g.P("func _new", service.GoName, "FollowerServer(service micro.Service, server ", service.GoName, "NATSFollowerServer, opts *", goNatsImplPkg.Ident("ServerOpts"), ") error {")
 		g.P("var err error")
 		g.P("_ = err") // In case there are no more methods so that err isn't unused
 
@@ -248,6 +264,7 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 				generateEndpointHandler(g, service, method)
 			}
 		}
+		g.P("return nil")
 		g.P("}")
 		g.P()
 	}
@@ -257,7 +274,7 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 
 func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method) {
 	handler := method.GoName + "Handler"
-	g.P(handler, " := ", microPkg.Ident("HandlerFunc"), "(func(request ", microRequest, ") {")
+	g.P(handler, " := ", microPkg.Ident("ContextHandler"), "(opts.ServerContext, impl.ApplyMiddlewares(func(ctx context.Context, request ", microRequest, ") {")
 
 	var handlerReq string
 	if method.Input.Location.SourceFile != emptyPb {
@@ -273,7 +290,7 @@ func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Servic
 	if method.Output.Location.SourceFile != emptyPb {
 		handlerResp = "response, "
 	}
-	g.P(handlerResp, "err := server.", method.GoName, "(", handlerReq, ")")
+	g.P(handlerResp, "err := server.", method.GoName, "(ctx, ", handlerReq, ")")
 	g.P("if err != nil {")
 	g.P("if ", goNatsPkg.Ident("IsServiceError"), "(err) {")
 	g.P(slogPkg.Ident("Warn"), "(", strconv.Quote("Server implementations should not return ServiceError, use go_nats.NewServerError instead"), ", ", strconv.Quote("error"), ", err)")
@@ -297,7 +314,7 @@ func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Servic
 	} else {
 		g.P("request.Respond(nil)")
 	}
-	g.P("})")
+	g.P("}, opts.UnaryInterceptorsChain...))")
 
 	if plugin.IsUsingBroadcasting(method) {
 		// Add a broadcast endpoint for the method
@@ -306,13 +323,13 @@ func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Servic
 		// Add a shared endpoint for the method
 		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName), ", ", handler, ", opts.Subject(", strconv.Quote(plugin.SubjectName(service, method)), ", ", strconv.Quote(""), "))")
 		g.P("if err != nil {")
-		g.P("panic(err) // TODO: Update this to proper error handling")
+		g.P("return err")
 		g.P("}")
 
 		// Add a direct endpoint for the method
 		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Direct"), ", ", handler, ", opts.Subject(", strconv.Quote(plugin.SubjectName(service, method)), ", service.Info().ID))")
 		g.P("if err != nil {")
-		g.P("panic(err) // TODO: Update this to proper error handling")
+		g.P("return err")
 		g.P("}")
 	}
 	g.P()

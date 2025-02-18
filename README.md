@@ -351,6 +351,27 @@ There's also an `Details` field in the ServiceError struct, but that's only used
 the server, instead of returning a proper ServerError, only returns a generic error.
 In that case, the result from that error's `Error()` will end up in the `Details` field.
 
+### Middleware
+
+You can use `go_nats.UnaryMiddleware` to process your request before it passed to handler function.
+```go
+func AuthenticationMiddleware(next go_nats.UnaryMiddlewareHandler) go_nats.UnaryMiddlewareHandler {
+    return func(ctx context.Context, req micro.Request) {
+        // Extract authentication token from metadata (if applicable)
+        // Example: authHeader, _ := req.Header("Authorization")
+        // if !isValidToken(authHeader) {
+        // 	req.Error("403", "Unauthorized", []byte("Provide valid token")
+        // 	return
+        // }
+        ctx = context.WithValue(ctx, "tokenKey", "access_token")
+        next(ctx, req)
+    }
+}
+
+nc, _ := nats.Connect(nats.DefaultURL)
+pb.NewHelloWorldServiceNATSServer(nc, &serviceImpl{}, go_nats.WithUnaryInterceptorChain(AuthenticationMiddleware))
+```
+
 ### Streaming
 
 Streaming is not yet supported, but is planned for the future.
