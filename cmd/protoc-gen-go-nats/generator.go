@@ -3,10 +3,11 @@ package main
 import (
 	"errors"
 	"fmt"
-	"github.com/nats-io/nats.go/micro"
-	"google.golang.org/protobuf/compiler/protogen"
 	"strconv"
 	"strings"
+
+	"github.com/nats-io/nats.go/micro"
+	"google.golang.org/protobuf/compiler/protogen"
 	"xiam.li/protonats/go/plugin"
 	"xiam.li/protonats/go/protonats"
 )
@@ -274,7 +275,7 @@ func generateServer(g *protogen.GeneratedFile, service *protogen.Service) error 
 
 func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Service, method *protogen.Method) {
 	handler := method.GoName + "Handler"
-	g.P(handler, " := ", microPkg.Ident("ContextHandler"), "(opts.ServerContext, impl.ApplyMiddlewares(func(ctx context.Context, request ", microRequest, ") {")
+	g.P(handler, " := ", microPkg.Ident("ContextHandler"), "(opts.ServerContext, impl.ApplyServerUnaryMiddlewares(func(ctx context.Context, request ", microRequest, ") {")
 
 	var handlerReq string
 	if method.Input.Location.SourceFile != emptyPb {
@@ -314,7 +315,7 @@ func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Servic
 	} else {
 		g.P("request.Respond(nil)")
 	}
-	g.P("}, opts.UnaryInterceptorsChain...))")
+	g.P("}, opts.UnaryMiddlewareChain...))")
 
 	if plugin.IsUsingBroadcasting(method) {
 		// Add a broadcast endpoint for the method
@@ -388,6 +389,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 	g.P("type ", unexport(cliName), " struct {")
 	g.P("nc *", natsConn)
 	g.P("timeout ", timeDuration)
+	g.P("unaryMiddlewareChain []protonats.ClientUnaryMiddleware")
 	g.P("}")
 	g.P()
 
@@ -417,7 +419,7 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 	g.P()
 	g.P("var tries int")
 	g.P("for {")
-	g.P("err = c.handle(options.Context, req, options.Subject(subject), out, timeout)")
+	g.P("err = c.handle(options.Context, req, options.Subject(subject), out, timeout, options)")
 	g.P("if err == nil || !errors.Is(err, ", natsPkg.Ident("ErrNoResponders"), ") {")
 	g.P("return")
 	g.P("}")
@@ -438,30 +440,38 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 	g.P("}")
 
 	// Generate handle function
-	g.P("func (c *", unexport(cliName), ") handle(ctx ", contextPkg.Ident("Context"), ", req ", protoMessage, ", subject string, out ", protoMessage, ", timeout ", timeDuration, ") (err error) {")
+	g.P("func (c *", unexport(cliName), ") handle(ctx ", contextPkg.Ident("Context"), ", req ", protoMessage, ", subject string, out ", protoMessage, ", timeout ", timeDuration, ", opts *impl.CallOpts) (err error) {")
+	g.P("if ctx == nil {")
+	g.P("ctx = context.Background()")
+	g.P("}")
 	g.P("var data []byte")
 	g.P("if req != nil {")
 	g.P("if data, err = ", protoMarshal, "(req); err != nil {")
 	g.P("return ", goNatsPkg.Ident("ErrMarshallingFailed"))
 	g.P("}")
 	g.P("}")
-	g.P("var msg *", natsPkg.Ident("Msg"))
-	g.P("if ctx == nil {")
-	g.P("msg, err = c.nc.Request(subject, data, timeout)")
-	g.P("} else {")
-	g.P("msg, err = c.nc.RequestWithContext(ctx, subject, data)")
+	g.P("reqMsg := nats_go.Msg{")
+	g.P("Subject: subject,")
+	g.P("Data:    data,")
+	g.P("Header:  opts.Headers,")
 	g.P("}")
+	g.P("var respMsg *", natsPkg.Ident("Msg"))
+	g.P("handler := c.nc.RequestMsgWithContext")
+	g.P("for i := len(c.unaryMiddlewareChain) - 1; i >= 0; i-- {")
+	g.P("handler = c.unaryMiddlewareChain[i](handler)")
+	g.P("}")
+	g.P("respMsg, err = handler(ctx, &reqMsg)")
 	g.P("if err != nil {")
 	g.P("return err")
 	g.P("}")
-	g.P("if errMsg, errCode := msg.Header.Get(", microPkg.Ident("ErrorHeader"), "), msg.Header.Get(", microPkg.Ident("ErrorCodeHeader"), "); len(errMsg) > 0 && len(errCode) > 0 {")
-	g.P("if len(msg.Data) == 0 {")
+	g.P("if errMsg, errCode := respMsg.Header.Get(", microPkg.Ident("ErrorHeader"), "), respMsg.Header.Get(", microPkg.Ident("ErrorCodeHeader"), "); len(errMsg) > 0 && len(errCode) > 0 {")
+	g.P("if len(respMsg.Data) == 0 {")
 	g.P("return ", goNatsPkg.Ident("ServiceError"), "{errCode, errMsg, \"\"}")
 	g.P("}")
-	g.P("return ", goNatsPkg.Ident("ServiceError"), "{errCode, errMsg, string(msg.Data)}")
+	g.P("return ", goNatsPkg.Ident("ServiceError"), "{errCode, errMsg, string(respMsg.Data)}")
 	g.P("}")
 	g.P("if out != nil {")
-	g.P("if err = ", protoUnmarshal, "(msg.Data, out); err != nil {")
+	g.P("if err = ", protoUnmarshal, "(respMsg.Data, out); err != nil {")
 	g.P("return ", goNatsPkg.Ident("ErrUnmarshallingFailed"))
 	g.P("}")
 	g.P("}")
@@ -555,8 +565,13 @@ func generateClient(g *protogen.GeneratedFile, service *protogen.Service) error 
 	g.P()
 
 	// Generate NewClient function
-	g.P("func New", cliName, "(nc *", natsConn, ") ", cliName, " {")
-	g.P("return &", unexport(cliName), "{nc: nc, timeout: ", timePkg.Ident("Second"), " * 5}")
+	g.P("func New", cliName, "(nc *", natsConn, ", opts ...protonats.ClientOption) ", cliName, " {")
+	g.P("options := impl.ProcessClientOptions(opts...)")
+	g.P("return &", unexport(cliName), "{")
+	g.P("nc: nc,")
+	g.P("timeout: ", timePkg.Ident("Second"), " * 5,")
+	g.P("unaryMiddlewareChain: options.UnaryMiddlewareChain,")
+	g.P("}")
 	g.P("}")
 	g.P()
 
