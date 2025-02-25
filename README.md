@@ -264,6 +264,29 @@ responses, serviceErrs, errs = cli.FanIn()
 serviceErrs, errs = cli.FanOut(&pb.HelloWorldRequest{Name: "John Doe"})
 ```
 
+### Instance identifier
+
+If you need the instance id of the current service on the server side, you could either call `.Info().ID` on the returned `micro.Service`, but your service implementation can also just implement the service-specfic generated `[ServiceName]ServiceId` interface.
+For example, if your service is defined as `HelloWorldService` in the protobuf file, the following interface would be generated:
+
+```go
+type HelloWorldServiceId interface {
+	SetHelloWorldServiceId(string)
+}
+```
+
+Therefore, you can just implement this interface on your service implementation optionally and upon initialization, the method would be called once, so you can store it in a field inside the service implementation, or similar:
+
+```go
+type helloWorldImpl struct {
+	id string
+}
+
+func (i *helloWorldImpl) SetHelloWorldServiceId(s string) {
+	i.id = s
+}
+```
+
 ### Consensus Integration
 
 If you use a consensus algorithm like Raft, you can use the `protonats.consensus_Target` option to mark methods to be used only by the leader or follower.
