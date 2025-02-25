@@ -302,19 +302,21 @@ func generateEndpointHandler(g *protogen.GeneratedFile, service *protogen.Servic
 	if plugin.IsUsingBroadcasting(method) {
 		// Add a broadcast endpoint for the method
 		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Broadcast"), ", ", handler, ", ", microPkg.Ident("WithEndpointQueueGroup"), "(", nuidPkg.Ident("Next"), "()), opts.Subject(", strconv.Quote(plugin.SubjectName(service, method)), ", ", strconv.Quote(""), "))")
+		g.P("if err != nil {")
+		g.P("panic(err) // TODO: Update this to proper error handling")
+		g.P("}")
 	} else {
 		// Add a shared endpoint for the method
 		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName), ", ", handler, ", opts.Subject(", strconv.Quote(plugin.SubjectName(service, method)), ", ", strconv.Quote(""), "))")
 		g.P("if err != nil {")
 		g.P("panic(err) // TODO: Update this to proper error handling")
 		g.P("}")
-
-		// Add a direct endpoint for the method
-		g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Direct"), ", ", handler, ", opts.Subject(", strconv.Quote(plugin.SubjectName(service, method)), ", service.Info().ID))")
-		g.P("if err != nil {")
-		g.P("panic(err) // TODO: Update this to proper error handling")
-		g.P("}")
 	}
+	// Add a direct endpoint for the method
+	g.P("err = service.AddEndpoint(", strconv.Quote(method.GoName+"-Direct"), ", ", handler, ", opts.Subject(", strconv.Quote(plugin.SubjectName(service, method)), ", service.Info().ID))")
+	g.P("if err != nil {")
+	g.P("panic(err) // TODO: Update this to proper error handling")
+	g.P("}")
 	g.P()
 }
 
